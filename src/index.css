@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tally-dark: #00253d;
+  --tally-navy: #003859;
+  --tally-teal: #004b6e;
+  --tally-canvas: #dbe7ee;
+  --tally-panel: #ffffff;
+  --tally-border: #8caebd;
+  --tally-yellow: #fed843;
+  --tally-hotkey: #a61a1a;
+  --tally-text: #0d222f;
+  --tally-text-muted: #4a6777;
+}
+
+body {
+  background-color: #dbe7ee;
+  color: #0d222f;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100vh;
+}
+
+::selection {
+  background-color: #fed843;
+  color: #000000;
+}
+
+/* Authentic Tally Prime Crisp Scrollbars */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: #dbe7ee;
+  border: 1px solid #c2d7e4;
+}
+::-webkit-scrollbar-thumb {
+  background: #8caebd;
+  border-radius: 0px;
+  border: 1px solid #7ea1b5;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #557e96;
+}
+
+/* Tally Prime Utility Classes */
+.tally-border {
+  border: 1px solid #8caebd;
+}
+
+.tally-header-teal {
+  background-color: #004b6e;
+  color: #ffffff;
+}
+
+.tally-ribbon {
+  background-color: #003859;
+  color: #ffffff;
+}
+
+.tally-hotkey {
+  color: #a61a1a;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.tally-selected-row {
+  background-color: #fed843 !important;
+  color: #000000 !important;
+}
+
+.tally-selected-row * {
+  color: #000000 !important;
+}
+
+/* Ensure no rounded corners in authentic Tally ERP view */
+.tally-sharp {
+  border-radius: 0 !important;
+}

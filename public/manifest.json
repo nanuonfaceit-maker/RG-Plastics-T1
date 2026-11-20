@@ -1,0 +1,44 @@
+{
+  "name": "Tally Prime ERP - RG Plastics",
+  "short_name": "TallyPrime",
+  "description": "Double-entry accounting, GST invoicing, inventory and financial reports for Indian businesses. Works offline.",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#dbe7ee",
+  "theme_color": "#00253d",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Create Voucher",
+      "short_name": "Voucher",
+      "description": "Create a new accounting voucher",
+      "url": "/#vouchers",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Day Book",
+      "short_name": "Day Book",
+      "description": "Open chronological Day Book",
+      "url": "/#daybook",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Profit & Loss",
+      "short_name": "P&L",
+      "description": "View Trading & P&L Statement",
+      "url": "/#profit-loss",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96" }]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="tallyNavy" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#003859" />
+      <stop offset="100%" stop-color="#001d30" />
+    </linearGradient>
+    <linearGradient id="tallyGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fed843" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="40" fill="url(#tallyNavy)" />
+  <rect x="16" y="16" width="480" height="480" rx="32" fill="none" stroke="#004b6e" stroke-width="8" />
+  
+  <!-- Tally Prime Signature Geometric 'T' & Prime Diamond Emblem -->
+  <polygon points="256,70 410,160 410,340 256,430 102,340 102,160" fill="none" stroke="url(#tallyGold)" stroke-width="16" />
+  
+  <!-- Bold Sharp Monogram T -->
+  <path d="M 160 170 L 352 170 L 352 225 L 284 225 L 284 370 L 228 370 L 228 225 L 160 225 Z" fill="url(#tallyGold)" />
+  
+  <!-- Gold Accent Badge -->
+  <rect x="200" y="390" width="112" height="26" fill="#fed843" rx="2" />
+  <text x="256" y="409" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="900" fill="#00253d" text-anchor="middle" letter-spacing="3">PRIME</text>
+</svg>
