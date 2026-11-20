@@ -412,21 +412,26 @@ export default function App() {
         return;
       }
 
-      // 2. Alt / Option Accelerators (Cross-Platform Mac & PC)
-      const isAlt = e.altKey;
+      // 2. Alt / Option / Command Accelerators (Cross-Platform Mac & PC)
       const isKey = (code: string, char: string, macDiacritic?: string) =>
-        e.code === code || e.key.toLowerCase() === char.toLowerCase() || (macDiacritic ? e.key === macDiacritic : false);
+        e.code === code ||
+        e.key.toLowerCase() === char.toLowerCase() ||
+        (macDiacritic ? e.key === macDiacritic : false);
 
-      // Alt+G (⌥G): Go To Quick Search
-      if (isAlt && isKey('KeyG', 'g', '©')) {
+      // Alt+G / Option+G / Cmd+G: Go To Quick Search
+      if ((e.altKey || e.metaKey) && isKey('KeyG', 'g', '©')) {
         e.preventDefault();
         e.stopPropagation();
         setIsGoToOpen((prev) => !prev);
         return;
       }
 
-      // Alt+C (⌥C): Quick Create Ledger / Master
-      if (isAlt && isKey('KeyC', 'c', 'ç')) {
+      // Alt+C / Option+C: Quick Create Ledger / Master
+      // For Cmd+C, allow normal copy if inside an input or if text is selected
+      if (
+        (e.altKey && isKey('KeyC', 'c', 'ç')) ||
+        (e.metaKey && isKey('KeyC', 'c', 'ç') && !isInput && !window.getSelection()?.toString())
+      ) {
         e.preventDefault();
         e.stopPropagation();
         setEditLedger(null);
@@ -434,32 +439,32 @@ export default function App() {
         return;
       }
 
-      // Alt+E (⌥E): Export Backup / Data
-      if (isAlt && isKey('KeyE', 'e', '´')) {
+      // Alt+E / Option+E / Cmd+E: Export Backup / Data
+      if ((e.altKey || e.metaKey) && (isKey('KeyE', 'e', '´') || e.code === 'KeyE')) {
         e.preventDefault();
         e.stopPropagation();
         void handleExportBackup();
         return;
       }
 
-      // Alt+K (⌥K): Company Alteration
-      if (isAlt && isKey('KeyK', 'k', '˚')) {
+      // Alt+K / Option+K / Cmd+K: Company Alteration
+      if ((e.altKey || e.metaKey) && isKey('KeyK', 'k', '˚')) {
         e.preventDefault();
         e.stopPropagation();
         setIsCompanyModalOpen(true);
         return;
       }
 
-      // Alt+Y (⌥Y): Data & Backup Center
-      if (isAlt && isKey('KeyY', 'y', '¥')) {
+      // Alt+Y / Option+Y / Cmd+Y: Data & Backup Center
+      if ((e.altKey || e.metaKey) && isKey('KeyY', 'y', '¥')) {
         e.preventDefault();
         e.stopPropagation();
         setIsSettingsOpen(true);
         return;
       }
 
-      // Alt+Z (⌥Z): Exchange / Reload Data
-      if (isAlt && isKey('KeyZ', 'z')) {
+      // Alt+Z / Option+Z: Exchange / Reload Data
+      if ((e.altKey || e.metaKey) && isKey('KeyZ', 'z')) {
         e.preventDefault();
         e.stopPropagation();
         void loadData();
@@ -467,16 +472,16 @@ export default function App() {
         return;
       }
 
-      // Alt+O (⌥O): Import Data
-      if (isAlt && isKey('KeyO', 'o', 'ø')) {
+      // Alt+O / Option+O / Cmd+O: Import Data
+      if ((e.altKey || (e.metaKey && !isInput)) && isKey('KeyO', 'o', 'ø')) {
         e.preventDefault();
         e.stopPropagation();
         setIsSettingsOpen(true);
         return;
       }
 
-      // Alt+P (⌥P): Print
-      if (isAlt && isKey('KeyP', 'p', 'π')) {
+      // Alt+P / Option+P / Cmd+P: Print
+      if ((e.altKey || e.metaKey) && isKey('KeyP', 'p', 'π')) {
         e.preventDefault();
         e.stopPropagation();
         window.print();

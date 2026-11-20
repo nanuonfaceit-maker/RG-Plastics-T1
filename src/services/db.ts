@@ -324,6 +324,8 @@ export async function importBackup(jsonString: string): Promise<{ success: boole
             companyId: activeCompanyId,
             name: p.name || 'Unnamed Party',
             groupId,
+            nature: groupId === 'sundry-debtors' ? 'Asset' : 'Liability',
+            isActive: true,
             openingBalance: Number(p.openingBalance || p.opening_balance || 0),
             openingType: groupId === 'sundry-debtors' ? 'Dr' : 'Cr',
             gstin: p.gstin,

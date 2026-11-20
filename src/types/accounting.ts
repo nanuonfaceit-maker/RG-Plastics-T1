@@ -36,6 +36,8 @@ export interface LedgerAccount {
   phone?: string;
   email?: string;
   isSystem?: boolean; // Cash, P&L
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type TallyVoucherType =

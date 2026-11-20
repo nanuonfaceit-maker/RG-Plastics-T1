@@ -453,7 +453,6 @@ export function VoucherEntryScreen({
       finalLines = buildLinesFromItems(itemLines, lines, voucherType);
       setLines(finalLines);
     }
-    }
 
     if (isSingleEntry && (voucherType === 'Payment' || voucherType === 'Receipt')) {
       const amt = parseFloat(singleAmount) || 0;
