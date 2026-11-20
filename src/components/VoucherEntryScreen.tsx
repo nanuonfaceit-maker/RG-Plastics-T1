@@ -891,14 +891,26 @@ export function VoucherEntryScreen({
             </div>
 
             <div className="flex items-center justify-between pt-1">
-              <button
-                type="button"
-                onClick={addLine}
-                className="bg-[#edf4f8] border border-[#7ea1b5] hover:bg-[#fed843] hover:text-black px-2.5 py-1 text-xs font-bold text-[#004b6e] flex items-center gap-1 transition"
-              >
-                <Plus size={12} />
-                <span>Add Entry Line</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={addLine}
+                  className="bg-[#edf4f8] border border-[#7ea1b5] hover:bg-[#fed843] hover:text-black px-2.5 py-1 text-xs font-bold text-[#004b6e] flex items-center gap-1 transition"
+                >
+                  <Plus size={12} />
+                  <span>Add Entry Line</span>
+                </button>
+                {onOpenCreateLedger && (
+                  <button
+                    type="button"
+                    onClick={onOpenCreateLedger}
+                    className="bg-[#edf4f8] border border-[#7ea1b5] hover:bg-[#fed843] hover:text-black px-2.5 py-1 text-xs font-bold text-[#a61a1a] flex items-center gap-1 transition"
+                  >
+                    <Plus size={12} />
+                    <span>Create Ledger (Alt+C)</span>
+                  </button>
+                )}
+              </div>
 
               <div className="flex items-center gap-3 font-mono text-xs">
                 {doubleEntryStats.difference !== 0 ? (

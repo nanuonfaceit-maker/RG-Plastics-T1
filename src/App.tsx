@@ -370,10 +370,7 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
 
-        if (target && isInput) {
-          target.blur();
-        }
-
+        // Close open overlays & modals first
         if (isGoToOpen) {
           setIsGoToOpen(false);
           return;
@@ -396,6 +393,13 @@ export default function App() {
           setEditLedger(null);
           return;
         }
+
+        // If typing in an input field, first Esc blurs the field
+        if (target && isInput) {
+          target.blur();
+          return;
+        }
+
         if (selectedLedgerId) {
           setSelectedLedgerId(null);
           return;
@@ -464,7 +468,7 @@ export default function App() {
       }
 
       // Alt+Z / Option+Z: Exchange / Reload Data
-      if ((e.altKey || e.metaKey) && isKey('KeyZ', 'z')) {
+      if ((e.altKey || e.metaKey) && isKey('KeyZ', 'z', 'Ω')) {
         e.preventDefault();
         e.stopPropagation();
         void loadData();
@@ -520,7 +524,7 @@ export default function App() {
       if (e.key === 'F8') {
         e.preventDefault();
         e.stopPropagation();
-        if (e.altKey) {
+        if (e.altKey || e.metaKey) {
           handleSelectVoucherType('Credit Note');
         } else {
           handleSelectVoucherType('Sales');
@@ -531,7 +535,7 @@ export default function App() {
       if (e.key === 'F9') {
         e.preventDefault();
         e.stopPropagation();
-        if (e.altKey) {
+        if (e.altKey || e.metaKey) {
           handleSelectVoucherType('Debit Note');
         } else {
           handleSelectVoucherType('Purchase');
