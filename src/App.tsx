@@ -563,8 +563,8 @@ export default function App() {
         }
       }
 
-      // 7. SINGLE-LETTER GATEWAY SHORTCUTS (Only when on Gateway dashboard and NOT typing inside an input)
-      if (view === 'dashboard' && !isInput && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      // 7. SINGLE-LETTER NAVIGATION SHORTCUTS (Active across all views when NOT typing inside an input)
+      if (view !== 'vouchers' && !isInput && !e.ctrlKey && !e.altKey && !e.metaKey) {
         if (isGoToOpen || isSettingsOpen || isCompanyModalOpen || isLedgerModalOpen || isStockModalOpen) {
           return;
         }
