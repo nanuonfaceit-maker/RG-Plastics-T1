@@ -401,7 +401,7 @@ export default function App() {
           return;
         }
         if (view === 'vouchers') {
-          // Allow VoucherEntryScreen to handle its own Escape confirmation
+          window.dispatchEvent(new CustomEvent('tally-cancel'));
           return;
         }
         if (view !== 'dashboard') {
@@ -564,7 +564,7 @@ export default function App() {
       }
 
       // 7. SINGLE-LETTER NAVIGATION SHORTCUTS (Active across all views when NOT typing inside an input)
-      if (view !== 'vouchers' && !isInput && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (!isInput && !e.ctrlKey && !e.altKey && !e.metaKey) {
         if (isGoToOpen || isSettingsOpen || isCompanyModalOpen || isLedgerModalOpen || isStockModalOpen) {
           return;
         }
@@ -740,7 +740,10 @@ export default function App() {
               godowns={godowns}
               allVouchers={vouchers}
               onSave={handleSaveVoucher}
-              onCancel={() => setView('daybook')}
+              onCancel={() => {
+                setView(editVoucher ? 'daybook' : 'dashboard');
+                setEditVoucher(null);
+              }}
               onOpenCreateLedger={() => {
                 setEditLedger(null);
                 setIsLedgerModalOpen(true);

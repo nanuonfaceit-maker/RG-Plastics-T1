@@ -533,6 +533,19 @@ export function VoucherEntryScreen({
     return () => window.removeEventListener('tally-accept', handleTallyAccept);
   }, [doubleEntryStats]);
 
+  // Handle tally-cancel custom event dispatched from App.tsx (Escape)
+  useEffect(() => {
+    const handleTallyCancel = () => {
+      if (showAcceptPrompt) {
+        setShowAcceptPrompt(false);
+        return;
+      }
+      handleCancel();
+    };
+    window.addEventListener('tally-cancel', handleTallyCancel);
+    return () => window.removeEventListener('tally-cancel', handleTallyCancel);
+  }, [showAcceptPrompt, handleCancel]);
+
   // Keyboard shortcut listener for Ctrl+A, Y/N, and Esc
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
