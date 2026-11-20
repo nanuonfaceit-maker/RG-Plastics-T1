@@ -14,6 +14,7 @@ import {
   formatINR,
   formatDate,
 } from '@/services/accountingEngine';
+import { downloadCSV } from '@/lib/csv';
 
 interface Props {
   ledgers: LedgerAccount[];
@@ -77,13 +78,7 @@ export function ProfitAndLossView({
       rows.push(`,,NET LOSS,${report.netLoss}`);
     }
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURI(rows.join('\n'));
-    const link = document.createElement('a');
-    link.setAttribute('href', csvContent);
-    link.setAttribute('download', `profit-and-loss-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSV(`profit-and-loss-${new Date().toISOString().slice(0, 10)}.csv`, rows.join('\n'));
   }
 
   function handlePrint() {

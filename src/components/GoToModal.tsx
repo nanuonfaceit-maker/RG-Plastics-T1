@@ -65,7 +65,8 @@ export function GoToModal({
   // Keyboard shortcut listener to toggle modal: Alt+G
   useEffect(() => {
     function handleGlobalKeyDown(e: KeyboardEvent) {
-      if ((e.altKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
+      const isAltG = (e.altKey || e.metaKey) && (e.code === 'KeyG' || e.key.toLowerCase() === 'g' || e.key === '©');
+      if (isAltG) {
         e.preventDefault();
         if (open) onClose();
       } else if (e.key === 'Escape' && open) {

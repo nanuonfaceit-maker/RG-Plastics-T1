@@ -64,8 +64,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Masters',
     items: [
-      { key: 'dashboard', label: 'Gateway of Tally', shortcut: 'G', icon: LayoutDashboard },
-      { key: 'chart-of-accounts', label: 'Chart of Accounts', shortcut: 'C', icon: BookOpen },
+      { key: 'dashboard', label: 'Gateway of Tally', shortcut: 'Esc', icon: LayoutDashboard },
+      { key: 'chart-of-accounts', label: 'Chart of Accounts', shortcut: 'H', icon: BookOpen },
     ],
   },
   {
@@ -88,7 +88,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: 'stock-summary', label: 'Stock Summary', shortcut: 'S', icon: Package },
       { key: 'outstanding', label: 'Outstanding Aging', shortcut: 'O', icon: Clock },
-      { key: 'gst-report', label: 'GST Invoicing', shortcut: 'R', icon: Percent },
+      { key: 'gst-report', label: 'GST Invoicing', shortcut: 'G', icon: Percent },
     ],
   },
 ];
@@ -115,6 +115,7 @@ export function AppShell({
         activeCompany={activeCompany}
         onOpenGoTo={onOpenGoTo}
         onExportCSV={onExportBackup}
+        onOpenCompanyModal={onOpenCompanyModal}
         onOpenSettings={onOpenSettings}
         onRefresh={onRefresh}
         isLoading={isLoading}
@@ -289,8 +290,8 @@ export function AppShell({
         </div>
       </nav>
 
-      {/* 3. Global Tally Bottom Status Bar (Desktop) */}
-      <div className="hidden lg:block">
+      {/* 3. Global Tally Bottom Status Bar */}
+      <div className="hidden sm:block">
         <TallyBottomBar currentView={active} />
       </div>
     </div>

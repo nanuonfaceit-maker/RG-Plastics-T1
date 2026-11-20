@@ -16,6 +16,7 @@ import {
   formatINR,
   formatDate,
 } from '@/services/accountingEngine';
+import { downloadCSV } from '@/lib/csv';
 
 interface Props {
   stockItems: StockItem[];
@@ -90,13 +91,7 @@ export function StockSummaryView({
       `TOTAL,,,${report.totalOpeningValue},,,,${report.totalClosingValue}`
     );
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURI(rows.join('\n'));
-    const link = document.createElement('a');
-    link.setAttribute('href', csvContent);
-    link.setAttribute('download', `stock-summary-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSV(`stock-summary-${new Date().toISOString().slice(0, 10)}.csv`, rows.join('\n'));
   }
 
   return (

@@ -269,6 +269,7 @@ export function GatewayOfTally({
         e.preventDefault();
         allItems[selectedIndex]?.action();
       } else {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
         const key = e.key.toUpperCase();
         const matched = allItems.find((item) => item.hotkey === key);
         if (matched) {

@@ -78,9 +78,142 @@ export function VoucherEntryScreen({
   const [saving, setSaving] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [showAcceptPrompt, setShowAcceptPrompt] = useState(false);
+  const initializedKeyRef = useRef<string | null>(null);
+
+  // Helper to build default double-entry lines for any voucher type
+  function getDefaultLinesForType(vType: TallyVoucherType, ledgersList: LedgerAccount[]): VoucherEntryLine[] {
+    const cashBank = ledgersList.find(
+      (l) => l.groupId === 'cash-in-hand' || l.groupId === 'bank-accounts'
+    );
+    const debtor = ledgersList.find((l) => l.groupId === 'sundry-debtors');
+    const creditor = ledgersList.find((l) => l.groupId === 'sundry-creditors');
+    const sales = ledgersList.find((l) => l.groupId === 'sales-accounts');
+    const purchase = ledgersList.find((l) => l.groupId === 'purchase-accounts');
+
+    if (vType === 'Sales') {
+      return [
+        { id: '1', ledgerId: debtor?.id || ledgersList[0]?.id || '', ledgerName: debtor?.name || ledgersList[0]?.name || '', type: 'Dr', amount: 0 },
+        { id: '2', ledgerId: sales?.id || ledgersList[1]?.id || '', ledgerName: sales?.name || ledgersList[1]?.name || '', type: 'Cr', amount: 0 },
+      ];
+    } else if (vType === 'Purchase') {
+      return [
+        { id: '1', ledgerId: purchase?.id || ledgersList[0]?.id || '', ledgerName: purchase?.name || ledgersList[0]?.name || '', type: 'Dr', amount: 0 },
+        { id: '2', ledgerId: creditor?.id || ledgersList[1]?.id || '', ledgerName: creditor?.name || ledgersList[1]?.name || '', type: 'Cr', amount: 0 },
+      ];
+    } else if (vType === 'Payment') {
+      return [
+        { id: '1', ledgerId: creditor?.id || ledgersList[0]?.id || '', ledgerName: creditor?.name || ledgersList[0]?.name || '', type: 'Dr', amount: 0 },
+        { id: '2', ledgerId: cashBank?.id || ledgersList[1]?.id || '', ledgerName: cashBank?.name || ledgersList[1]?.name || '', type: 'Cr', amount: 0 },
+      ];
+    } else if (vType === 'Receipt') {
+      return [
+        { id: '1', ledgerId: cashBank?.id || ledgersList[0]?.id || '', ledgerName: cashBank?.name || ledgersList[0]?.name || '', type: 'Dr', amount: 0 },
+        { id: '2', ledgerId: debtor?.id || ledgersList[1]?.id || '', ledgerName: debtor?.name || ledgersList[1]?.name || '', type: 'Cr', amount: 0 },
+      ];
+    } else {
+      return [
+        { id: '1', ledgerId: ledgersList[0]?.id || '', ledgerName: ledgersList[0]?.name || '', type: 'Dr', amount: 0 },
+        { id: '2', ledgerId: ledgersList[1]?.id || '', ledgerName: ledgersList[1]?.name || '', type: 'Cr', amount: 0 },
+      ];
+    }
+  }
+
+  // Helper to synchronize item lines to double-entry ledger lines
+  function buildLinesFromItems(
+    items: ItemEntryLine[],
+    currentLines: VoucherEntryLine[],
+    vType: TallyVoucherType = voucherType
+  ): VoucherEntryLine[] {
+    if (items.length === 0) return currentLines;
+
+    const itemsSubtotal = round2(items.reduce((sum, item) => sum + item.amount, 0));
+    const totalCGST = round2(items.reduce((sum, item) => sum + item.cgst, 0));
+    const totalSGST = round2(items.reduce((sum, item) => sum + item.sgst, 0));
+    const totalIGST = round2(items.reduce((sum, item) => sum + item.igst, 0));
+    const grandTotal = round2(itemsSubtotal + totalCGST + totalSGST + totalIGST);
+
+    const partyGroupId = vType === 'Sales' ? 'sundry-debtors' : 'sundry-creditors';
+    const mainAccGroupId = vType === 'Sales' ? 'sales-accounts' : 'purchase-accounts';
+
+    // Preserve currently selected party ledger if present
+    const existingPartyLine = vType === 'Sales'
+      ? currentLines.find((l) => l.type === 'Dr')
+      : currentLines.find((l) => l.type === 'Cr');
+    const existingPartyLedger = existingPartyLine ? ledgers.find((l) => l.id === existingPartyLine.ledgerId) : null;
+    const partyLedger = existingPartyLedger || ledgers.find((l) => l.groupId === partyGroupId) || ledgers[0];
+
+    // Preserve currently selected main account (Sales/Purchase) ledger if present
+    const existingMainLine = vType === 'Sales'
+      ? currentLines.find((l) => l.type === 'Cr' && !l.ledgerName.toLowerCase().includes('gst'))
+      : currentLines.find((l) => l.type === 'Dr' && !l.ledgerName.toLowerCase().includes('gst'));
+    const existingMainLedger = existingMainLine ? ledgers.find((l) => l.id === existingMainLine.ledgerId) : null;
+    const mainLedger = existingMainLedger || ledgers.find((l) => l.groupId === mainAccGroupId) || ledgers[1];
+
+    // Choose Input CGST/SGST/IGST (ITC) for Purchase / Debit Note, and Output for Sales / Credit Note
+    const isPurchase = vType === 'Purchase' || vType === 'Debit Note';
+    const cgstLedger = isPurchase
+      ? ledgers.find((l) => l.name.toLowerCase().includes('cgst') && (l.name.toLowerCase().includes('input') || l.name.toLowerCase().includes('itc'))) || ledgers.find((l) => l.name.toLowerCase().includes('cgst'))
+      : ledgers.find((l) => l.name.toLowerCase().includes('cgst') && l.name.toLowerCase().includes('output')) || ledgers.find((l) => l.name.toLowerCase().includes('cgst'));
+
+    const sgstLedger = isPurchase
+      ? ledgers.find((l) => l.name.toLowerCase().includes('sgst') && (l.name.toLowerCase().includes('input') || l.name.toLowerCase().includes('itc'))) || ledgers.find((l) => l.name.toLowerCase().includes('sgst'))
+      : ledgers.find((l) => l.name.toLowerCase().includes('sgst') && l.name.toLowerCase().includes('output')) || ledgers.find((l) => l.name.toLowerCase().includes('sgst'));
+
+    const igstLedger = isPurchase
+      ? ledgers.find((l) => l.name.toLowerCase().includes('igst') && (l.name.toLowerCase().includes('input') || l.name.toLowerCase().includes('itc'))) || ledgers.find((l) => l.name.toLowerCase().includes('igst'))
+      : ledgers.find((l) => l.name.toLowerCase().includes('igst') && l.name.toLowerCase().includes('output')) || ledgers.find((l) => l.name.toLowerCase().includes('igst'));
+
+    const newLines: VoucherEntryLine[] = [];
+
+    if (vType === 'Sales') {
+      newLines.push({
+        id: '1',
+        ledgerId: partyLedger?.id || '',
+        ledgerName: partyLedger?.name || '',
+        type: 'Dr',
+        amount: grandTotal,
+      });
+      newLines.push({
+        id: '2',
+        ledgerId: mainLedger?.id || '',
+        ledgerName: mainLedger?.name || '',
+        type: 'Cr',
+        amount: itemsSubtotal,
+      });
+      if (totalCGST > 0 && cgstLedger) newLines.push({ id: '3', ledgerId: cgstLedger.id, ledgerName: cgstLedger.name, type: 'Cr', amount: totalCGST });
+      if (totalSGST > 0 && sgstLedger) newLines.push({ id: '4', ledgerId: sgstLedger.id, ledgerName: sgstLedger.name, type: 'Cr', amount: totalSGST });
+      if (totalIGST > 0 && igstLedger) newLines.push({ id: '5', ledgerId: igstLedger.id, ledgerName: igstLedger.name, type: 'Cr', amount: totalIGST });
+    } else {
+      newLines.push({
+        id: '1',
+        ledgerId: mainLedger?.id || '',
+        ledgerName: mainLedger?.name || '',
+        type: 'Dr',
+        amount: itemsSubtotal,
+      });
+      if (totalCGST > 0 && cgstLedger) newLines.push({ id: '2', ledgerId: cgstLedger.id, ledgerName: cgstLedger.name, type: 'Dr', amount: totalCGST });
+      if (totalSGST > 0 && sgstLedger) newLines.push({ id: '3', ledgerId: sgstLedger.id, ledgerName: sgstLedger.name, type: 'Dr', amount: totalSGST });
+      if (totalIGST > 0 && igstLedger) newLines.push({ id: '4', ledgerId: igstLedger.id, ledgerName: igstLedger.name, type: 'Dr', amount: totalIGST });
+      newLines.push({
+        id: '99',
+        ledgerId: partyLedger?.id || '',
+        ledgerName: partyLedger?.name || '',
+        type: 'Cr',
+        amount: grandTotal,
+      });
+    }
+
+    return newLines;
+  }
 
   // Initialize or reset form state
   useEffect(() => {
+    const currentKey = existingVoucher ? `edit-${existingVoucher.id}` : `new-${initialType}`;
+    if (initializedKeyRef.current === currentKey) {
+      return;
+    }
+    initializedKeyRef.current = currentKey;
+
     if (existingVoucher) {
       setVoucherType(existingVoucher.voucherType);
       setVoucherNumber(existingVoucher.voucherNumber);
@@ -111,113 +244,46 @@ export function VoucherEntryScreen({
         }
       }
     } else {
-      const nextNum = generateNextVoucherNumber(allVouchers, voucherType);
+      const nextNum = generateNextVoucherNumber(allVouchers, initialType);
+      setVoucherType(initialType);
       setVoucherNumber(nextNum);
       setDate(todayISO());
       setReferenceNo('');
       setNarration('');
       setItemLines([]);
 
+      const defLines = getDefaultLinesForType(initialType, ledgers);
+      setLines(defLines);
+
       const cashBank = ledgers.find(
         (l) => l.groupId === 'cash-in-hand' || l.groupId === 'bank-accounts'
       );
       const debtor = ledgers.find((l) => l.groupId === 'sundry-debtors');
       const creditor = ledgers.find((l) => l.groupId === 'sundry-creditors');
-      const sales = ledgers.find((l) => l.groupId === 'sales-accounts');
-      const purchase = ledgers.find((l) => l.groupId === 'purchase-accounts');
-
-      if (voucherType === 'Sales') {
-        setLines([
-          {
-            id: '1',
-            ledgerId: debtor?.id || ledgers[0]?.id || '',
-            ledgerName: debtor?.name || ledgers[0]?.name || '',
-            type: 'Dr',
-            amount: 0,
-          },
-          {
-            id: '2',
-            ledgerId: sales?.id || ledgers[1]?.id || '',
-            ledgerName: sales?.name || ledgers[1]?.name || '',
-            type: 'Cr',
-            amount: 0,
-          },
-        ]);
-      } else if (voucherType === 'Purchase') {
-        setLines([
-          {
-            id: '1',
-            ledgerId: purchase?.id || ledgers[0]?.id || '',
-            ledgerName: purchase?.name || ledgers[0]?.name || '',
-            type: 'Dr',
-            amount: 0,
-          },
-          {
-            id: '2',
-            ledgerId: creditor?.id || ledgers[1]?.id || '',
-            ledgerName: creditor?.name || ledgers[1]?.name || '',
-            type: 'Cr',
-            amount: 0,
-          },
-        ]);
-      } else if (voucherType === 'Payment') {
-        setLines([
-          {
-            id: '1',
-            ledgerId: creditor?.id || ledgers[0]?.id || '',
-            ledgerName: creditor?.name || ledgers[0]?.name || '',
-            type: 'Dr',
-            amount: 0,
-          },
-          {
-            id: '2',
-            ledgerId: cashBank?.id || ledgers[1]?.id || '',
-            ledgerName: cashBank?.name || ledgers[1]?.name || '',
-            type: 'Cr',
-            amount: 0,
-          },
-        ]);
+      if (initialType === 'Payment') {
         if (cashBank) setSingleAccountLedgerId(cashBank.id);
         if (creditor) setSinglePartyLedgerId(creditor.id);
-      } else if (voucherType === 'Receipt') {
-        setLines([
-          {
-            id: '1',
-            ledgerId: cashBank?.id || ledgers[0]?.id || '',
-            ledgerName: cashBank?.name || ledgers[0]?.name || '',
-            type: 'Dr',
-            amount: 0,
-          },
-          {
-            id: '2',
-            ledgerId: debtor?.id || ledgers[1]?.id || '',
-            ledgerName: debtor?.name || ledgers[1]?.name || '',
-            type: 'Cr',
-            amount: 0,
-          },
-        ]);
+      } else if (initialType === 'Receipt') {
         if (cashBank) setSingleAccountLedgerId(cashBank.id);
         if (debtor) setSinglePartyLedgerId(debtor.id);
-      } else {
-        setLines([
-          {
-            id: '1',
-            ledgerId: ledgers[0]?.id || '',
-            ledgerName: ledgers[0]?.name || '',
-            type: 'Dr',
-            amount: 0,
-          },
-          {
-            id: '2',
-            ledgerId: ledgers[1]?.id || '',
-            ledgerName: ledgers[1]?.name || '',
-            type: 'Cr',
-            amount: 0,
-          },
-        ]);
       }
     }
-  }, [existingVoucher, voucherType, allVouchers, ledgers]);
+  }, [existingVoucher, initialType, allVouchers, ledgers]);
+
+  function handleSwitchVoucherType(newType: TallyVoucherType) {
+    if (newType === voucherType) return;
+    setVoucherType(newType);
+    const nextNum = generateNextVoucherNumber(allVouchers, newType);
+    setVoucherNumber(nextNum);
+    initializedKeyRef.current = `new-${newType}`;
+
+    const defLines = getDefaultLinesForType(newType, ledgers);
+    setLines(defLines);
+
+    if (newType !== 'Sales' && newType !== 'Purchase' && newType !== 'Debit Note' && newType !== 'Credit Note') {
+      setItemLines([]);
+    }
+  }
 
   // Compute live Double-Entry validation
   const doubleEntryStats = useMemo(() => {
@@ -294,25 +360,26 @@ export function VoucherEntryScreen({
     const cgst = round2((amount * halfRate) / 100);
     const sgst = round2((amount * halfRate) / 100);
 
-    setItemLines((prev) => [
-      ...prev,
-      {
-        id: String(Date.now()),
-        itemId: defaultItem.id,
-        itemName: defaultItem.name,
-        godownId: defaultGodown?.id,
-        godownName: defaultGodown?.name,
-        quantity: qty,
-        unit: defaultItem.unit,
-        rate,
-        amount,
-        gstRate,
-        hsnCode: defaultItem.hsnCode,
-        cgst,
-        sgst,
-        igst: 0,
-      },
-    ]);
+    const newItem: ItemEntryLine = {
+      id: String(Date.now()),
+      itemId: defaultItem.id,
+      itemName: defaultItem.name,
+      godownId: defaultGodown?.id,
+      godownName: defaultGodown?.name,
+      quantity: qty,
+      unit: defaultItem.unit,
+      rate,
+      amount,
+      gstRate,
+      hsnCode: defaultItem.hsnCode,
+      cgst,
+      sgst,
+      igst: 0,
+    };
+
+    const nextItems = [...itemLines, newItem];
+    setItemLines(nextItems);
+    setLines(buildLinesFromItems(nextItems, lines, voucherType));
   }
 
   function updateItemLine(index: number, updates: Partial<ItemEntryLine>) {
@@ -359,111 +426,35 @@ export function VoucherEntryScreen({
       }
 
       copy[index] = line;
+      setLines(buildLinesFromItems(copy, lines, voucherType));
       return copy;
     });
   }
 
   function removeItemLine(index: number) {
-    setItemLines((prev) => prev.filter((_, i) => i !== index));
+    const nextItems = itemLines.filter((_, i) => i !== index);
+    setItemLines(nextItems);
+    if (nextItems.length > 0) {
+      setLines(buildLinesFromItems(nextItems, lines, voucherType));
+    }
   }
 
   function syncItemsToAccounts() {
     if (itemLines.length === 0) return;
-
-    const itemsSubtotal = round2(itemLines.reduce((sum, item) => sum + item.amount, 0));
-    const totalCGST = round2(itemLines.reduce((sum, item) => sum + item.cgst, 0));
-    const totalSGST = round2(itemLines.reduce((sum, item) => sum + item.sgst, 0));
-    const totalIGST = round2(itemLines.reduce((sum, item) => sum + item.igst, 0));
-    const grandTotal = round2(itemsSubtotal + totalCGST + totalSGST + totalIGST);
-
-    const partyGroupId = voucherType === 'Sales' ? 'sundry-debtors' : 'sundry-creditors';
-    const mainAccGroupId = voucherType === 'Sales' ? 'sales-accounts' : 'purchase-accounts';
-
-    // Preserve currently selected party ledger if present
-    const existingPartyLine = voucherType === 'Sales'
-      ? lines.find((l) => l.type === 'Dr')
-      : lines.find((l) => l.type === 'Cr');
-    const existingPartyLedger = existingPartyLine ? ledgers.find((l) => l.id === existingPartyLine.ledgerId) : null;
-    const partyLedger = existingPartyLedger || ledgers.find((l) => l.groupId === partyGroupId) || ledgers[0];
-
-    // Preserve currently selected main account (Sales/Purchase) ledger if present
-    const existingMainLine = voucherType === 'Sales'
-      ? lines.find((l) => l.type === 'Cr' && !l.ledgerName.toLowerCase().includes('gst'))
-      : lines.find((l) => l.type === 'Dr' && !l.ledgerName.toLowerCase().includes('gst'));
-    const existingMainLedger = existingMainLine ? ledgers.find((l) => l.id === existingMainLine.ledgerId) : null;
-    const mainLedger = existingMainLedger || ledgers.find((l) => l.groupId === mainAccGroupId) || ledgers[1];
-
-    // Choose Input CGST/SGST/IGST (ITC) for Purchase / Debit Note, and Output for Sales / Credit Note
-    const isPurchase = voucherType === 'Purchase' || voucherType === 'Debit Note';
-    const cgstLedger = isPurchase
-      ? ledgers.find((l) => l.name.toLowerCase().includes('cgst') && (l.name.toLowerCase().includes('input') || l.name.toLowerCase().includes('itc'))) || ledgers.find((l) => l.name.toLowerCase().includes('cgst'))
-      : ledgers.find((l) => l.name.toLowerCase().includes('cgst') && l.name.toLowerCase().includes('output')) || ledgers.find((l) => l.name.toLowerCase().includes('cgst'));
-
-    const sgstLedger = isPurchase
-      ? ledgers.find((l) => l.name.toLowerCase().includes('sgst') && (l.name.toLowerCase().includes('input') || l.name.toLowerCase().includes('itc'))) || ledgers.find((l) => l.name.toLowerCase().includes('sgst'))
-      : ledgers.find((l) => l.name.toLowerCase().includes('sgst') && l.name.toLowerCase().includes('output')) || ledgers.find((l) => l.name.toLowerCase().includes('sgst'));
-
-    const igstLedger = isPurchase
-      ? ledgers.find((l) => l.name.toLowerCase().includes('igst') && (l.name.toLowerCase().includes('input') || l.name.toLowerCase().includes('itc'))) || ledgers.find((l) => l.name.toLowerCase().includes('igst'))
-      : ledgers.find((l) => l.name.toLowerCase().includes('igst') && l.name.toLowerCase().includes('output')) || ledgers.find((l) => l.name.toLowerCase().includes('igst'));
-
-    const newLines: VoucherEntryLine[] = [];
-
-    if (voucherType === 'Sales') {
-      newLines.push({
-        id: '1',
-        ledgerId: partyLedger?.id || '',
-        ledgerName: partyLedger?.name || '',
-        type: 'Dr',
-        amount: grandTotal,
-      });
-      newLines.push({
-        id: '2',
-        ledgerId: mainLedger?.id || '',
-        ledgerName: mainLedger?.name || '',
-        type: 'Cr',
-        amount: itemsSubtotal,
-      });
-      if (totalCGST > 0 && cgstLedger) {
-        newLines.push({ id: '3', ledgerId: cgstLedger.id, ledgerName: cgstLedger.name, type: 'Cr', amount: totalCGST });
-      }
-      if (totalSGST > 0 && sgstLedger) {
-        newLines.push({ id: '4', ledgerId: sgstLedger.id, ledgerName: sgstLedger.name, type: 'Cr', amount: totalSGST });
-      }
-      if (totalIGST > 0 && igstLedger) {
-        newLines.push({ id: '5', ledgerId: igstLedger.id, ledgerName: igstLedger.name, type: 'Cr', amount: totalIGST });
-      }
-    } else {
-      newLines.push({
-        id: '1',
-        ledgerId: mainLedger?.id || '',
-        ledgerName: mainLedger?.name || '',
-        type: 'Dr',
-        amount: itemsSubtotal,
-      });
-      if (totalCGST > 0 && cgstLedger) {
-        newLines.push({ id: '2', ledgerId: cgstLedger.id, ledgerName: cgstLedger.name, type: 'Dr', amount: totalCGST });
-      }
-      if (totalSGST > 0 && sgstLedger) {
-        newLines.push({ id: '3', ledgerId: sgstLedger.id, ledgerName: sgstLedger.name, type: 'Dr', amount: totalSGST });
-      }
-      if (totalIGST > 0 && igstLedger) {
-        newLines.push({ id: '4', ledgerId: igstLedger.id, ledgerName: igstLedger.name, type: 'Dr', amount: totalIGST });
-      }
-      newLines.push({
-        id: '99',
-        ledgerId: partyLedger?.id || '',
-        ledgerName: partyLedger?.name || '',
-        type: 'Cr',
-        amount: grandTotal,
-      });
-    }
-
-    setLines(newLines);
+    const synchronized = buildLinesFromItems(itemLines, lines, voucherType);
+    setLines(synchronized);
   }
 
   async function handleSave() {
     let finalLines = lines;
+
+    // In Item Mode (Sales/Purchase/Credit Note/Debit Note), automatically ensure ledger lines reflect item totals
+    if (itemLines.length > 0 && !isSingleEntry) {
+      finalLines = buildLinesFromItems(itemLines, lines, voucherType);
+      setLines(finalLines);
+    }
+    }
+
     if (isSingleEntry && (voucherType === 'Payment' || voucherType === 'Receipt')) {
       const amt = parseFloat(singleAmount) || 0;
       const acc = ledgers.find((l) => l.id === singleAccountLedgerId);
@@ -617,7 +608,7 @@ export function VoucherEntryScreen({
             <button
               key={item.type}
               type="button"
-              onClick={() => setVoucherType(item.type)}
+              onClick={() => handleSwitchVoucherType(item.type)}
               className={`px-2 py-0.5 text-[11px] font-bold border transition cursor-pointer flex items-center gap-1 ${
                 voucherType === item.type
                   ? 'bg-[#fed843] text-black border-[#00253d] shadow-xs'

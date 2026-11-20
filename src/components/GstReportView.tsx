@@ -17,6 +17,7 @@ import {
   formatINR,
   formatDate,
 } from '@/services/accountingEngine';
+import { downloadCSV } from '@/lib/csv';
 import { InvoicePrintModal } from './InvoicePrintModal';
 
 interface Props {
@@ -95,13 +96,7 @@ export function GstReportView({
       `Net Tax Payable / (Credit),,${report.netPayable.cgst},${report.netPayable.sgst},${report.netPayable.igst},${report.netPayable.total}`
     );
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURI(rows.join('\n'));
-    const link = document.createElement('a');
-    link.setAttribute('href', csvContent);
-    link.setAttribute('download', `gst-summary-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSV(`gst-summary-${new Date().toISOString().slice(0, 10)}.csv`, rows.join('\n'));
   }
 
   return (

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { Voucher, TallyVoucherType } from '@/types/accounting';
 import { formatINR, formatDate, round2 } from '@/services/accountingEngine';
+import { downloadCSV } from '@/lib/csv';
 
 interface Props {
   vouchers: Voucher[];
@@ -79,14 +80,8 @@ export function DayBookView({
       ];
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `daybook-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadCSV(`daybook-${new Date().toISOString().slice(0, 10)}.csv`, csvContent);
   }
 
   return (

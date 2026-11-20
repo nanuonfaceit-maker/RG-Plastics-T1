@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ArrowLeft, Download, Pencil, Calendar, BookOpen } from 'lucide-react';
 import type { LedgerAccount, Voucher } from '@/types/accounting';
 import { computeLedgerStatement, formatINR, formatINRWithDrCr, formatDate } from '@/services/accountingEngine';
+import { downloadCSV } from '@/lib/csv';
 
 interface Props {
   ledger: LedgerAccount;
@@ -46,14 +47,8 @@ export function LedgerStatementView({
       ['', 'Closing Balance', '', '', statement.totalDebit.toFixed(2), statement.totalCredit.toFixed(2), statement.closingBalance.toFixed(2), statement.closingType],
     ];
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((r) => r.join(',')).join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `ledger-${ledger.name.replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const csvContent = rows.map((r) => r.join(',')).join('\n');
+    downloadCSV(`ledger-${ledger.name.replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 10)}.csv`, csvContent);
   }
 
   return (

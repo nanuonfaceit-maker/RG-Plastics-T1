@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { LedgerAccount, AccountGroup, Voucher } from '@/types/accounting';
 import { computeTrialBalance, formatINR, formatDate } from '@/services/accountingEngine';
+import { downloadCSV } from '@/lib/csv';
 
 interface Props {
   ledgers: LedgerAccount[];
@@ -56,15 +57,8 @@ export function TrialBalanceView({
 
     rows.push(['TOTAL', report.totalClosingDebit.toFixed(2), report.totalClosingCredit.toFixed(2)]);
 
-    const csvContent =
-      'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `trial-balance-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadCSV(`trial-balance-${new Date().toISOString().slice(0, 10)}.csv`, csvContent);
   }
 
   return (

@@ -57,6 +57,7 @@ import { ChartOfAccountsView } from '@/components/ChartOfAccountsView';
 import { LedgerStatementView } from '@/components/LedgerStatementView';
 import { CompanyModal } from '@/components/CompanyModal';
 import { LedgerModal } from '@/components/LedgerModal';
+import { StockItemModal } from '@/components/StockItemModal';
 import { GoToModal } from '@/components/GoToModal';
 
 export default function App() {
@@ -80,6 +81,10 @@ export default function App() {
   // Ledger Edit State
   const [editLedger, setEditLedger] = useState<LedgerAccount | null>(null);
   const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
+
+  // Stock Item State
+  const [editStockItem, setEditStockItem] = useState<StockItem | null>(null);
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
 
   // Company Modal State
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
@@ -255,6 +260,26 @@ export default function App() {
     showToast(`Company profile updated`);
   }
 
+  // Save Stock Item
+  async function handleSaveStockItem(s: StockItem) {
+    if (!activeCompany) return;
+    await saveStockItem(s);
+    const updated = await getStockItems(activeCompany.id);
+    setStockItems(updated);
+    setIsStockModalOpen(false);
+    setEditStockItem(null);
+    showToast(`Stock item "${s.name}" saved`);
+  }
+
+  // Save Godown
+  async function handleSaveGodown(gd: Godown) {
+    if (!activeCompany) return;
+    await saveGodown(gd);
+    const updated = await getGodowns(activeCompany.id);
+    setGodowns(updated);
+    showToast(`Godown "${gd.name}" added`);
+  }
+
   // Export JSON Backup
   const handleExportBackup = useCallback(async () => {
     try {
@@ -361,6 +386,11 @@ export default function App() {
           setIsCompanyModalOpen(false);
           return;
         }
+        if (isStockModalOpen) {
+          setIsStockModalOpen(false);
+          setEditStockItem(null);
+          return;
+        }
         if (isLedgerModalOpen) {
           setIsLedgerModalOpen(false);
           setEditLedger(null);
@@ -382,16 +412,21 @@ export default function App() {
         return;
       }
 
-      // 2. Alt+G: Go To Quick Search
-      if (e.altKey && (e.key === 'g' || e.key === 'G')) {
+      // 2. Alt / Option Accelerators (Cross-Platform Mac & PC)
+      const isAlt = e.altKey;
+      const isKey = (code: string, char: string, macDiacritic?: string) =>
+        e.code === code || e.key.toLowerCase() === char.toLowerCase() || (macDiacritic ? e.key === macDiacritic : false);
+
+      // Alt+G (⌥G): Go To Quick Search
+      if (isAlt && isKey('KeyG', 'g', '©')) {
         e.preventDefault();
         e.stopPropagation();
         setIsGoToOpen((prev) => !prev);
         return;
       }
 
-      // 3. Alt+C: Quick Create Ledger / Master
-      if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+      // Alt+C (⌥C): Quick Create Ledger / Master
+      if (isAlt && isKey('KeyC', 'c', 'ç')) {
         e.preventDefault();
         e.stopPropagation();
         setEditLedger(null);
@@ -399,16 +434,56 @@ export default function App() {
         return;
       }
 
-      // 4. Alt+E: Export Backup / Data
-      if (e.altKey && (e.key === 'e' || e.key === 'E')) {
+      // Alt+E (⌥E): Export Backup / Data
+      if (isAlt && isKey('KeyE', 'e', '´')) {
         e.preventDefault();
         e.stopPropagation();
         void handleExportBackup();
         return;
       }
 
+      // Alt+K (⌥K): Company Alteration
+      if (isAlt && isKey('KeyK', 'k', '˚')) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsCompanyModalOpen(true);
+        return;
+      }
+
+      // Alt+Y (⌥Y): Data & Backup Center
+      if (isAlt && isKey('KeyY', 'y', '¥')) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsSettingsOpen(true);
+        return;
+      }
+
+      // Alt+Z (⌥Z): Exchange / Reload Data
+      if (isAlt && isKey('KeyZ', 'z')) {
+        e.preventDefault();
+        e.stopPropagation();
+        void loadData();
+        showToast('Database refreshed');
+        return;
+      }
+
+      // Alt+O (⌥O): Import Data
+      if (isAlt && isKey('KeyO', 'o', 'ø')) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsSettingsOpen(true);
+        return;
+      }
+
+      // Alt+P (⌥P): Print
+      if (isAlt && isKey('KeyP', 'p', 'π')) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.print();
+        return;
+      }
+
       // 5. FUNCTION KEYS: F4 to F9 (and Alt+F8, Alt+F9)
-      // Must intercept with preventDefault to block browser reload (F5) / address bar (F6) / caret (F7)
       if (e.key === 'F4') {
         e.preventDefault();
         e.stopPropagation();
@@ -483,9 +558,9 @@ export default function App() {
         }
       }
 
-      // 7. SINGLE-LETTER GATEWAY SHORTCUTS (Only when NOT typing inside an input)
-      if (!isInput && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        if (isGoToOpen || isSettingsOpen || isCompanyModalOpen || isLedgerModalOpen) {
+      // 7. SINGLE-LETTER GATEWAY SHORTCUTS (Only when on Gateway dashboard and NOT typing inside an input)
+      if (view === 'dashboard' && !isInput && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (isGoToOpen || isSettingsOpen || isCompanyModalOpen || isLedgerModalOpen || isStockModalOpen) {
           return;
         }
 
@@ -493,7 +568,7 @@ export default function App() {
         switch (k) {
           case 'G':
             e.preventDefault();
-            handleNavigate('dashboard');
+            handleNavigate('gst-report');
             break;
           case 'V':
             e.preventDefault();
@@ -528,6 +603,14 @@ export default function App() {
             handleNavigate('gst-report');
             break;
           case 'C':
+            e.preventDefault();
+            setEditLedger(null);
+            setIsLedgerModalOpen(true);
+            break;
+          case 'A':
+            e.preventDefault();
+            setIsCompanyModalOpen(true);
+            break;
           case 'H':
             e.preventDefault();
             handleNavigate('chart-of-accounts');
@@ -548,6 +631,7 @@ export default function App() {
     isSettingsOpen,
     isCompanyModalOpen,
     isLedgerModalOpen,
+    isStockModalOpen,
     selectedLedgerId,
     view,
     handleSelectVoucherType,
@@ -726,6 +810,10 @@ export default function App() {
               stockItems={stockItems}
               godowns={godowns}
               vouchers={vouchers}
+              onOpenCreateItem={() => {
+                setEditStockItem(null);
+                setIsStockModalOpen(true);
+              }}
               onSelectVoucher={(id) => {
                 const v = vouchers.find((item) => item.id === id);
                 if (v) {
@@ -810,6 +898,22 @@ export default function App() {
           existingLedger={editLedger}
           onSave={handleSaveLedger}
           onDelete={editLedger ? handleDeleteLedger : undefined}
+        />
+      )}
+
+      {/* Stock Item & Godown Creation Modal (Alt+C in Inventory) */}
+      {activeCompany && (
+        <StockItemModal
+          open={isStockModalOpen}
+          onClose={() => {
+            setIsStockModalOpen(false);
+            setEditStockItem(null);
+          }}
+          companyId={activeCompany.id}
+          godowns={godowns}
+          existingItem={editStockItem}
+          onSaveItem={handleSaveStockItem}
+          onSaveGodown={handleSaveGodown}
         />
       )}
 

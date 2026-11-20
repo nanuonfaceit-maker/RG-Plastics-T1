@@ -18,6 +18,7 @@ import {
   formatDate,
   todayISO,
 } from '@/services/accountingEngine';
+import { downloadCSV } from '@/lib/csv';
 
 interface Props {
   ledgers: LedgerAccount[];
@@ -79,13 +80,7 @@ export function BalanceSheetView({
     rows.push(`TOTAL LIABILITIES,${report.totalLiabilities},TOTAL ASSETS,${report.totalAssets}`);
     rows.push(`Balanced?,${report.isBalanced ? 'YES' : 'NO'},Difference,${report.difference}`);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURI(rows.join('\n'));
-    const link = document.createElement('a');
-    link.setAttribute('href', csvContent);
-    link.setAttribute('download', `balance-sheet-${asOfDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSV(`balance-sheet-${asOfDate}.csv`, rows.join('\n'));
   }
 
   function handlePrint() {

@@ -8,6 +8,7 @@ interface Props {
   onSwitchCompany?: (id: string) => void;
   onOpenGoTo: () => void;
   onExportCSV: () => void;
+  onOpenCompanyModal?: () => void;
   onOpenSettings: () => void;
   onRefresh?: () => void;
   isLoading?: boolean;
@@ -19,6 +20,7 @@ export function TallyHeader({
   onSwitchCompany,
   onOpenGoTo,
   onExportCSV,
+  onOpenCompanyModal,
   onOpenSettings,
   onRefresh,
   isLoading,
@@ -119,18 +121,18 @@ export function TallyHeader({
         <div className="flex items-center gap-1 sm:gap-2">
           <button
             type="button"
-            onClick={onOpenSettings}
-            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium flex items-center text-[11px]"
-            title="Press Alt+K for Company Menu"
+            onClick={onOpenCompanyModal || onOpenSettings}
+            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium flex items-center text-[11px] cursor-pointer"
+            title="Company Alteration / Profile (Alt+K / F3)"
           >
             <span className="text-[#fed843] font-bold underline mr-0.5">K</span>: Company
           </button>
 
           <button
             type="button"
-            onClick={onExportCSV}
-            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium flex items-center text-[11px]"
-            title="Press Alt+Y for Data Backup"
+            onClick={onOpenSettings}
+            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium flex items-center text-[11px] cursor-pointer"
+            title="Data Backup & Restore (Alt+Y)"
           >
             <span className="text-[#fed843] font-bold underline mr-0.5">Y</span>: Data
           </button>
@@ -138,8 +140,8 @@ export function TallyHeader({
           <button
             type="button"
             onClick={onRefresh}
-            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium hidden md:flex items-center text-[11px]"
-            title="Press Alt+Z for Exchange / Sync"
+            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium hidden md:flex items-center text-[11px] cursor-pointer"
+            title="Exchange / Refresh Database (Alt+Z)"
           >
             <span className="text-[#fed843] font-bold underline mr-0.5">Z</span>: Exchange
           </button>
@@ -150,8 +152,8 @@ export function TallyHeader({
           <button
             type="button"
             onClick={onOpenGoTo}
-            className="w-full h-6.5 bg-[#002236] border border-[#557e96] hover:border-[#fed843] px-2.5 flex items-center justify-between text-white text-[11px] group transition shadow-inner"
-            title="Press Alt+G to open Go To search"
+            className="w-full h-6.5 bg-[#002236] border border-[#557e96] hover:border-[#fed843] px-2.5 flex items-center justify-between text-white text-[11px] group transition shadow-inner cursor-pointer"
+            title="Press Alt+G (or ⌥+G on Mac) to open Go To search"
           >
             <div className="flex items-center gap-2">
               <Search size={12} className="text-[#fed843]" />
@@ -163,7 +165,7 @@ export function TallyHeader({
               </span>
             </div>
             <kbd className="bg-[#001724] border border-[#557e96] text-[#fed843] font-mono text-[9px] px-1 font-bold">
-              Alt+G
+              Alt+G / ⌥G
             </kbd>
           </button>
         </div>
@@ -172,9 +174,9 @@ export function TallyHeader({
         <div className="flex items-center gap-1 sm:gap-2">
           <button
             type="button"
-            onClick={onExportCSV}
-            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium hidden sm:flex items-center text-[11px]"
-            title="Press Alt+O for Import"
+            onClick={onOpenSettings}
+            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium hidden sm:flex items-center text-[11px] cursor-pointer"
+            title="Import Backup Data (Alt+O)"
           >
             <span className="text-[#fed843] font-bold underline mr-0.5">O</span>: Import
           </button>
@@ -182,17 +184,17 @@ export function TallyHeader({
           <button
             type="button"
             onClick={onExportCSV}
-            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium flex items-center text-[11px]"
-            title="Press Alt+E for Export"
+            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium flex items-center text-[11px] cursor-pointer"
+            title="Export Offline JSON Backup (Alt+E)"
           >
             <span className="text-[#fed843] font-bold underline mr-0.5">E</span>: Export
           </button>
 
           <button
             type="button"
-            onClick={onOpenSettings}
-            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium hidden lg:flex items-center text-[11px]"
-            title="Press Alt+P for Print"
+            onClick={() => window.print()}
+            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium hidden lg:flex items-center text-[11px] cursor-pointer"
+            title="Print Current Screen (Alt+P / ⌘P)"
           >
             <span className="text-[#fed843] font-bold underline mr-0.5">P</span>: Print
           </button>
@@ -200,8 +202,8 @@ export function TallyHeader({
           <button
             type="button"
             onClick={onOpenSettings}
-            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium flex items-center text-[11px]"
-            title="Press F1 for Help"
+            className="px-2 py-1 hover:bg-[#004b6e] hover:text-[#fed843] transition font-medium flex items-center text-[11px] cursor-pointer"
+            title="Help & System Utilities (F1)"
           >
             <span className="text-[#fed843] font-bold mr-0.5">F1</span>: Help
           </button>

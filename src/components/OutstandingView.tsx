@@ -17,6 +17,7 @@ import {
   formatDate,
   todayISO,
 } from '@/services/accountingEngine';
+import { downloadCSV } from '@/lib/csv';
 
 interface Props {
   company: Company;
@@ -70,13 +71,7 @@ export function OutstandingView({
       `TOTAL,,,${report.total0_30},${report.total31_60},${report.total61_90},${report.total90Plus},${report.totalOutstanding}`
     );
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURI(rows.join('\n'));
-    const link = document.createElement('a');
-    link.setAttribute('href', csvContent);
-    link.setAttribute('download', `outstanding-${tab.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSV(`outstanding-${tab.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`, rows.join('\n'));
   }
 
   function handleSendWhatsAppReminder(party: (typeof report.parties)[0]) {
