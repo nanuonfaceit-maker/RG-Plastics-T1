@@ -58,6 +58,72 @@ export function formatDate(iso: string): string {
   });
 }
 
+/**
+ * Convert numbers to Indian Rupees in words with Paise support
+ */
+export function numberToWordsINR(amount: number): string {
+  if (!Number.isFinite(amount)) return 'Zero Rupees Only';
+
+  const isNeg = amount < 0;
+  const absAmt = Math.abs(amount);
+  const rounded = Math.round(absAmt * 100) / 100;
+  const n = Math.floor(rounded);
+  const paise = Math.round((rounded - n) * 100);
+
+  if (n === 0 && paise === 0) return 'Zero Rupees Only';
+
+  const units = [
+    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+    'Seventeen', 'Eighteen', 'Nineteen',
+  ];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  function convertBelowThousand(num: number): string {
+    let str = '';
+    if (num >= 100) {
+      str += units[Math.floor(num / 100)] + ' Hundred ';
+      num %= 100;
+    }
+    if (num >= 20) {
+      str += tens[Math.floor(num / 10)] + ' ';
+      num %= 10;
+    }
+    if (num > 0) {
+      str += units[num] + ' ';
+    }
+    return str.trim();
+  }
+
+  let words = '';
+  if (n > 0) {
+    const crore = Math.floor(n / 10000000);
+    let rem = n % 10000000;
+    const lakh = Math.floor(rem / 100000);
+    rem %= 100000;
+    const thousand = Math.floor(rem / 1000);
+    rem %= 1000;
+
+    if (crore > 0) words += convertBelowThousand(crore) + ' Crore ';
+    if (lakh > 0) words += convertBelowThousand(lakh) + ' Lakh ';
+    if (thousand > 0) words += convertBelowThousand(thousand) + ' Thousand ';
+    if (rem > 0) words += convertBelowThousand(rem);
+    words = `${words.trim()} Rupees`;
+  }
+
+  if (paise > 0) {
+    const paiseWords = convertBelowThousand(paise);
+    if (words) {
+      words += ` and ${paiseWords} Paise`;
+    } else {
+      words = `${paiseWords} Paise`;
+    }
+  }
+
+  const prefix = isNeg ? 'Minus ' : '';
+  return `${prefix}${words} Only`;
+}
+
 export function todayISO(): string {
   const d = new Date();
   const y = d.getFullYear();
@@ -105,8 +171,6 @@ export function computeLedgerStatement(
   toDate?: string
 ): LedgerStatement {
   // Opening balance in signed terms: Dr is positive, Cr is negative (for Assets/Expenses)
-  // For standard unified ledger tracking:
-  // Net Balance = (Opening Dr - Opening Cr) + (Total Dr - Total Cr)
   let netCents = (ledger.openingType === 'Dr' ? 1 : -1) * Math.round((ledger.openingBalance || 0) * 100);
 
   // Filter vouchers related to this ledger
@@ -114,16 +178,34 @@ export function computeLedgerStatement(
     .filter((v) => v.lines.some((l) => l.ledgerId === ledger.id))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.voucherNumber.localeCompare(b.voucherNumber)));
 
+  // If fromDate is specified, advance netCents by all vouchers strictly before fromDate
+  if (fromDate) {
+    for (const v of sortedVouchers) {
+      if (v.date < fromDate) {
+        let vDr = 0;
+        let vCr = 0;
+        for (const line of v.lines) {
+          if (line.ledgerId === ledger.id) {
+            if (line.type === 'Dr') vDr += Math.round(Number(line.amount || 0) * 100);
+            else if (line.type === 'Cr') vCr += Math.round(Number(line.amount || 0) * 100);
+          }
+        }
+        netCents += vDr - vCr;
+      }
+    }
+  }
+
+  const periodOpeningBalance = fromDate ? Math.abs(netCents) / 100 : (ledger.openingBalance || 0);
+  const periodOpeningType: BalanceType = fromDate ? (netCents >= 0 ? 'Dr' : 'Cr') : (ledger.openingType || 'Dr');
+
   let periodDebitCents = 0;
   let periodCreditCents = 0;
   const entries: LedgerStatementEntry[] = [];
 
   for (const v of sortedVouchers) {
-    // If date filters apply
-    const isBeforeFrom = fromDate && v.date < fromDate;
-    const isAfterTo = toDate && v.date > toDate;
+    if (fromDate && v.date < fromDate) continue;
+    if (toDate && v.date > toDate) continue;
 
-    // Sum debit/credit for this voucher
     let voucherDr = 0;
     let voucherCr = 0;
 
@@ -134,7 +216,6 @@ export function computeLedgerStatement(
       }
     }
 
-    // Identify contra / counter particulars
     const otherLines = v.lines.filter((l) => l.ledgerId !== ledger.id);
     const particulars =
       otherLines.length === 1
@@ -143,30 +224,24 @@ export function computeLedgerStatement(
         ? `As per details (${otherLines.map((o) => o.ledgerName).slice(0, 2).join(', ')}${otherLines.length > 2 ? '...' : ''})`
         : v.narration || v.voucherType;
 
-    if (isBeforeFrom) {
-      // Prior to period: rolls into period opening
-      netCents += voucherDr - voucherCr;
-    } else if (!isAfterTo) {
-      // Within period
-      netCents += voucherDr - voucherCr;
-      periodDebitCents += voucherDr;
-      periodCreditCents += voucherCr;
+    netCents += voucherDr - voucherCr;
+    periodDebitCents += voucherDr;
+    periodCreditCents += voucherCr;
 
-      const runningBal = Math.abs(netCents) / 100;
-      const runningType: BalanceType = netCents >= 0 ? 'Dr' : 'Cr';
+    const runningBal = Math.abs(netCents) / 100;
+    const runningType: BalanceType = netCents >= 0 ? 'Dr' : 'Cr';
 
-      entries.push({
-        voucherId: v.id,
-        voucherNumber: v.voucherNumber,
-        voucherType: v.voucherType,
-        date: v.date,
-        particulars: particulars,
-        debit: voucherDr / 100,
-        credit: voucherCr / 100,
-        runningBalance: runningBal,
-        runningType: runningType,
-      });
-    }
+    entries.push({
+      voucherId: v.id,
+      voucherNumber: v.voucherNumber,
+      voucherType: v.voucherType,
+      date: v.date,
+      particulars: particulars,
+      debit: voucherDr / 100,
+      credit: voucherCr / 100,
+      runningBalance: runningBal,
+      runningType: runningType,
+    });
   }
 
   const closingBalance = Math.abs(netCents) / 100;
@@ -174,8 +249,8 @@ export function computeLedgerStatement(
 
   return {
     ledger,
-    openingBalance: ledger.openingBalance,
-    openingType: ledger.openingType,
+    openingBalance: periodOpeningBalance,
+    openingType: periodOpeningType,
     totalDebit: periodDebitCents / 100,
     totalCredit: periodCreditCents / 100,
     closingBalance,
@@ -252,8 +327,10 @@ export function computeTrialBalance(
       nature: l.nature || 'Asset',
     };
 
-    const opDr = l.openingType === 'Dr' ? l.openingBalance : 0;
-    const opCr = l.openingType === 'Cr' ? l.openingBalance : 0;
+    const opBal = fromDate ? stmt.openingBalance : (l.openingBalance || 0);
+    const opType = fromDate ? stmt.openingType : (l.openingType || 'Dr');
+    const opDr = opType === 'Dr' ? opBal : 0;
+    const opCr = opType === 'Cr' ? opBal : 0;
     const clDr = stmt.closingType === 'Dr' ? stmt.closingBalance : 0;
     const clCr = stmt.closingType === 'Cr' ? stmt.closingBalance : 0;
 
@@ -334,21 +411,32 @@ export function generateNextVoucherNumber(vouchers: Voucher[], type: TallyVouche
     'Credit Note': 'CRNT',
   };
 
-  const prefix = prefixMap[type] || 'VCH';
+  const defaultPrefix = prefixMap[type] || 'VCH';
   const matching = vouchers.filter((v) => v.voucherType === type);
 
-  // Extract numeric suffixes
+  if (matching.length === 0) {
+    return `${defaultPrefix}-001`;
+  }
+
+  // Extract trailing numeric sequence (\d+)$
   let maxSeq = 0;
+  let detectedPrefix = `${defaultPrefix}-`;
+  let padLength = 3;
+
   for (const v of matching) {
-    const num = v.voucherNumber.replace(/^[^\d]+/, '');
-    const parsed = parseInt(num, 10);
-    if (!isNaN(parsed) && parsed > maxSeq) {
-      maxSeq = parsed;
+    const match = v.voucherNumber.match(/^(.*?)(\d+)$/);
+    if (match) {
+      const parsed = parseInt(match[2], 10);
+      if (!isNaN(parsed) && parsed > maxSeq) {
+        maxSeq = parsed;
+        detectedPrefix = match[1];
+        padLength = Math.max(match[2].length, 3);
+      }
     }
   }
 
-  const nextSeq = String(maxSeq + 1).padStart(3, '0');
-  return `${prefix}-${nextSeq}`;
+  const nextSeq = String(maxSeq + 1).padStart(padLength, '0');
+  return `${detectedPrefix}${nextSeq}`;
 }
 
 // ============================================================================
@@ -386,7 +474,9 @@ export function computeStockSummary(
   stockItems: StockItem[],
   vouchers: Voucher[],
   godowns: Godown[] = [],
-  filterGodownId?: string
+  filterGodownId?: string,
+  fromDate?: string,
+  toDate?: string
 ): StockSummaryReport {
   const godownMap = new Map<string, string>();
   for (const g of godowns) godownMap.set(g.id, g.name);
@@ -402,9 +492,14 @@ export function computeStockSummary(
       // Continue but check if item has movements in this godown
     }
 
-    const opQty = Number(item.openingQty || 0);
-    const opRate = Number(item.openingRate || 0);
-    const opVal = item.openingValue !== undefined ? Number(item.openingValue) : round2(opQty * opRate);
+    const baseOpQty = Number(item.openingQty || 0);
+    const baseOpRate = Number(item.openingRate || 0);
+    const baseOpVal = item.openingValue !== undefined ? Number(item.openingValue) : round2(baseOpQty * baseOpRate);
+
+    let priorInQty = 0;
+    let priorInVal = 0;
+    let priorOutQty = 0;
+    let priorOutVal = 0;
 
     let inQty = 0;
     let inVal = 0;
@@ -414,11 +509,14 @@ export function computeStockSummary(
     // Godown distribution tracker
     const godownDist = new Map<string, number>();
     if (item.godownId) {
-      godownDist.set(item.godownId, opQty);
+      godownDist.set(item.godownId, baseOpQty);
     }
 
     for (const v of vouchers) {
       if (!v.itemLines || v.itemLines.length === 0) continue;
+
+      const isBeforeFrom = fromDate && v.date < fromDate;
+      const isAfterTo = toDate && v.date > toDate;
 
       for (const line of v.itemLines) {
         if (line.itemId === item.id) {
@@ -427,19 +525,40 @@ export function computeStockSummary(
           const gId = line.godownId || item.godownId || 'g-main';
 
           if (v.voucherType === 'Purchase' || v.voucherType === 'Credit Note') {
-            inQty += lineQty;
-            inVal += lineAmt;
-            const currentGQty = godownDist.get(gId) || 0;
-            godownDist.set(gId, currentGQty + lineQty);
+            if (isBeforeFrom) {
+              priorInQty += lineQty;
+              priorInVal += lineAmt;
+            } else if (!isAfterTo) {
+              inQty += lineQty;
+              inVal += lineAmt;
+            }
+            if (!isAfterTo) {
+              const currentGQty = godownDist.get(gId) || 0;
+              godownDist.set(gId, currentGQty + lineQty);
+            }
           } else if (v.voucherType === 'Sales' || v.voucherType === 'Debit Note') {
-            outQty += lineQty;
-            outVal += lineAmt;
-            const currentGQty = godownDist.get(gId) || 0;
-            godownDist.set(gId, currentGQty - lineQty);
+            if (isBeforeFrom) {
+              priorOutQty += lineQty;
+              priorOutVal += lineAmt;
+            } else if (!isAfterTo) {
+              outQty += lineQty;
+              outVal += lineAmt;
+            }
+            if (!isAfterTo) {
+              const currentGQty = godownDist.get(gId) || 0;
+              godownDist.set(gId, currentGQty - lineQty);
+            }
           }
         }
       }
     }
+
+    const opQty = fromDate ? baseOpQty + priorInQty - priorOutQty : baseOpQty;
+    const priorAvailQty = baseOpQty + priorInQty;
+    const priorAvailVal = baseOpVal + priorInVal;
+    const priorAvgRate = priorAvailQty > 0 ? round2(priorAvailVal / priorAvailQty) : baseOpRate;
+    const opVal = fromDate ? round2(Math.max(0, opQty) * priorAvgRate) : baseOpVal;
+    const opRate = opQty > 0 ? priorAvgRate : baseOpRate;
 
     const closingQty = opQty + inQty - outQty;
 
@@ -548,7 +667,7 @@ export function computeProfitAndLoss(
   toDate?: string
 ): ProfitAndLossReport {
   // 1. Stock Valuation
-  const stockSummary = computeStockSummary(stockItems, vouchers);
+  const stockSummary = computeStockSummary(stockItems, vouchers, undefined, undefined, fromDate, toDate);
   const openingStock = stockSummary.totalOpeningValue;
   const closingStock = stockSummary.totalClosingValue;
 
@@ -572,33 +691,45 @@ export function computeProfitAndLoss(
 
   for (const l of ledgers) {
     const stmt = computeLedgerStatement(l, vouchers, fromDate, toDate);
-    const bal = stmt.closingBalance;
-    if (bal === 0) continue;
+    // When evaluating a specific period (fromDate defined), measure only activity during that period.
+    // When evaluating without fromDate, closing balance reflects cumulative activity.
+    const netDr = fromDate
+      ? round2(stmt.totalDebit - stmt.totalCredit)
+      : (stmt.closingType === 'Dr' ? stmt.closingBalance : -stmt.closingBalance);
+    const netCr = fromDate
+      ? round2(stmt.totalCredit - stmt.totalDebit)
+      : (stmt.closingType === 'Cr' ? stmt.closingBalance : -stmt.closingBalance);
 
     if (l.groupId === 'purchase-accounts') {
-      const net = stmt.closingType === 'Dr' ? bal : -bal;
-      purchases.push({ ledgerId: l.id, name: l.name, amount: net });
-      totalPurchases += net;
+      if (netDr !== 0) {
+        purchases.push({ ledgerId: l.id, name: l.name, amount: netDr });
+        totalPurchases += netDr;
+      }
     } else if (l.groupId === 'direct-expenses') {
-      const net = stmt.closingType === 'Dr' ? bal : -bal;
-      directExpenses.push({ ledgerId: l.id, name: l.name, amount: net });
-      totalDirectExpenses += net;
+      if (netDr !== 0) {
+        directExpenses.push({ ledgerId: l.id, name: l.name, amount: netDr });
+        totalDirectExpenses += netDr;
+      }
     } else if (l.groupId === 'sales-accounts') {
-      const net = stmt.closingType === 'Cr' ? bal : -bal;
-      sales.push({ ledgerId: l.id, name: l.name, amount: net });
-      totalSales += net;
+      if (netCr !== 0) {
+        sales.push({ ledgerId: l.id, name: l.name, amount: netCr });
+        totalSales += netCr;
+      }
     } else if (l.groupId === 'direct-income') {
-      const net = stmt.closingType === 'Cr' ? bal : -bal;
-      directIncomes.push({ ledgerId: l.id, name: l.name, amount: net });
-      totalDirectIncomes += net;
+      if (netCr !== 0) {
+        directIncomes.push({ ledgerId: l.id, name: l.name, amount: netCr });
+        totalDirectIncomes += netCr;
+      }
     } else if (l.groupId === 'indirect-expenses') {
-      const net = stmt.closingType === 'Dr' ? bal : -bal;
-      indirectExpenses.push({ ledgerId: l.id, name: l.name, amount: net });
-      totalIndirectExpenses += net;
+      if (netDr !== 0) {
+        indirectExpenses.push({ ledgerId: l.id, name: l.name, amount: netDr });
+        totalIndirectExpenses += netDr;
+      }
     } else if (l.groupId === 'indirect-income') {
-      const net = stmt.closingType === 'Cr' ? bal : -bal;
-      indirectIncomes.push({ ledgerId: l.id, name: l.name, amount: net });
-      totalIndirectIncomes += net;
+      if (netCr !== 0) {
+        indirectIncomes.push({ ledgerId: l.id, name: l.name, amount: netCr });
+        totalIndirectIncomes += netCr;
+      }
     }
   }
 
@@ -910,11 +1041,32 @@ export function computeGstSummary(
       } else {
         // Fallback to ledger lines
         for (const line of v.lines) {
+          const lName = line.ledgerName.toLowerCase();
           if (line.type === 'Cr') {
-            if (line.ledgerName.includes('CGST')) outCgst += line.amount;
-            else if (line.ledgerName.includes('SGST')) outSgst += line.amount;
-            else if (line.ledgerName.includes('IGST')) outIgst += line.amount;
-            else if (line.ledgerName.includes('Sales')) outTaxable += line.amount;
+            if (lName.includes('cgst')) outCgst += line.amount;
+            else if (lName.includes('sgst')) outSgst += line.amount;
+            else if (lName.includes('igst')) outIgst += line.amount;
+            else if (lName.includes('sales')) outTaxable += line.amount;
+          }
+        }
+      }
+    } else if (v.voucherType === 'Credit Note') {
+      // Credit Note reduces outward supplies & output liability
+      if (v.itemLines && v.itemLines.length > 0) {
+        for (const line of v.itemLines) {
+          outTaxable -= Number(line.amount || 0);
+          outCgst -= Number(line.cgst || 0);
+          outSgst -= Number(line.sgst || 0);
+          outIgst -= Number(line.igst || 0);
+        }
+      } else {
+        for (const line of v.lines) {
+          const lName = line.ledgerName.toLowerCase();
+          if (line.type === 'Dr') {
+            if (lName.includes('cgst')) outCgst -= line.amount;
+            else if (lName.includes('sgst')) outSgst -= line.amount;
+            else if (lName.includes('igst')) outIgst -= line.amount;
+            else if (lName.includes('sales') || lName.includes('credit')) outTaxable -= line.amount;
           }
         }
       }
@@ -930,11 +1082,32 @@ export function computeGstSummary(
       } else {
         // Fallback to ledger lines
         for (const line of v.lines) {
+          const lName = line.ledgerName.toLowerCase();
           if (line.type === 'Dr') {
-            if (line.ledgerName.includes('CGST')) inCgst += line.amount;
-            else if (line.ledgerName.includes('SGST')) inSgst += line.amount;
-            else if (line.ledgerName.includes('IGST')) inIgst += line.amount;
-            else if (line.ledgerName.includes('Purchase')) inTaxable += line.amount;
+            if (lName.includes('cgst')) inCgst += line.amount;
+            else if (lName.includes('sgst')) inSgst += line.amount;
+            else if (lName.includes('igst')) inIgst += line.amount;
+            else if (lName.includes('purchase')) inTaxable += line.amount;
+          }
+        }
+      }
+    } else if (v.voucherType === 'Debit Note') {
+      // Debit Note reduces inward supplies & input tax credit
+      if (v.itemLines && v.itemLines.length > 0) {
+        for (const line of v.itemLines) {
+          inTaxable -= Number(line.amount || 0);
+          inCgst -= Number(line.cgst || 0);
+          inSgst -= Number(line.sgst || 0);
+          inIgst -= Number(line.igst || 0);
+        }
+      } else {
+        for (const line of v.lines) {
+          const lName = line.ledgerName.toLowerCase();
+          if (line.type === 'Cr') {
+            if (lName.includes('cgst')) inCgst -= line.amount;
+            else if (lName.includes('sgst')) inSgst -= line.amount;
+            else if (lName.includes('igst')) inIgst -= line.amount;
+            else if (lName.includes('purchase') || lName.includes('debit')) inTaxable -= line.amount;
           }
         }
       }
@@ -985,6 +1158,7 @@ export interface OutstandingPartyItem {
   phone?: string;
   totalOutstanding: number;
   type: BalanceType;
+  isAdvance?: boolean;
   aging: {
     days0_30: number;
     days31_60: number;
@@ -1028,11 +1202,10 @@ export function computeOutstandingAging(
     const stmt = computeLedgerStatement(l, vouchers);
     if (stmt.closingBalance === 0) continue;
 
-    // Only include if balance matches normal party status (debtor Dr, creditor Cr)
-    if (stmt.closingType !== expectedBalType) continue;
-
+    // Retain contrary balances as customer or vendor advances
+    const isAdvance = stmt.closingType !== expectedBalType;
     const totalBal = stmt.closingBalance;
-    grandTotal += totalBal;
+    grandTotal += isAdvance ? -totalBal : totalBal;
 
     // Allocate into aging brackets based on voucher dates
     let rem = totalBal;
@@ -1041,14 +1214,18 @@ export function computeOutstandingAging(
     let b61_90 = 0;
     let b90Plus = 0;
 
+    const voucherLineType = isAdvance
+      ? (expectedBalType === 'Dr' ? 'Cr' : 'Dr')
+      : expectedBalType;
+
     // Sort relevant vouchers descending (latest to oldest)
     const partyVouchers = vouchers
-      .filter((v) => v.lines.some((line) => line.ledgerId === l.id && line.type === expectedBalType))
-      .sort((a, b) => (b.date.localeCompare(a.date)));
+      .filter((v) => v.lines.some((line) => line.ledgerId === l.id && line.type === voucherLineType))
+      .sort((a, b) => b.date.localeCompare(a.date));
 
     for (const v of partyVouchers) {
       if (rem <= 0) break;
-      const vLine = v.lines.find((line) => line.ledgerId === l.id && line.type === expectedBalType);
+      const vLine = v.lines.find((line) => line.ledgerId === l.id && line.type === voucherLineType);
       const lineAmt = vLine ? vLine.amount : 0;
       const alloc = Math.min(rem, lineAmt);
 
@@ -1068,18 +1245,21 @@ export function computeOutstandingAging(
       b90Plus += rem;
     }
 
-    grand0_30 += b0_30;
-    grand31_60 += b31_60;
-    grand61_90 += b61_90;
-    grand90Plus += b90Plus;
+    if (!isAdvance) {
+      grand0_30 += b0_30;
+      grand31_60 += b31_60;
+      grand61_90 += b61_90;
+      grand90Plus += b90Plus;
+    }
 
     parties.push({
       ledgerId: l.id,
-      partyName: l.name,
+      partyName: isAdvance ? `${l.name} (Advance)` : l.name,
       gstin: l.gstin,
       phone: l.phone,
       totalOutstanding: round2(totalBal),
       type: stmt.closingType,
+      isAdvance,
       aging: {
         days0_30: round2(b0_30),
         days31_60: round2(b31_60),
@@ -1100,3 +1280,5 @@ export function computeOutstandingAging(
     parties: parties.sort((a, b) => b.totalOutstanding - a.totalOutstanding),
   };
 }
+
+export const computeOutstandingBalances = computeOutstandingAging;

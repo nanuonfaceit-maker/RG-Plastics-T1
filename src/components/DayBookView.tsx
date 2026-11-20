@@ -218,7 +218,7 @@ export function DayBookView({
                   const totalVoucherAmt = drLines.reduce((s, l) => s + Number(l.amount || 0), 0);
 
                   const primaryParty =
-                    v.voucherType === 'Sales' || v.voucherType === 'Receipt'
+                    v.voucherType === 'Sales' || v.voucherType === 'Payment' || v.voucherType === 'Debit Note'
                       ? drLines[0]?.ledgerName
                       : crLines[0]?.ledgerName;
 

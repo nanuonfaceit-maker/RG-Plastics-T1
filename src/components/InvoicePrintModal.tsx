@@ -2,7 +2,9 @@ import React from 'react';
 import { Printer, Share2, X, Download, Building2, Check } from 'lucide-react';
 import type { Company } from '@/types/company';
 import type { Voucher, LedgerAccount } from '@/types/accounting';
-import { formatINR, formatDate } from '@/services/accountingEngine';
+import { formatINR, formatDate, numberToWordsINR } from '@/services/accountingEngine';
+
+export { numberToWordsINR };
 
 interface Props {
   open: boolean;
@@ -10,50 +12,6 @@ interface Props {
   voucher: Voucher | null;
   company: Company;
   partyLedger?: LedgerAccount | null;
-}
-
-// Convert numbers to Indian Rupees in words
-function numberToWordsINR(amount: number): string {
-  const n = Math.floor(amount);
-  if (n === 0) return 'Zero Rupees Only';
-
-  const units = [
-    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
-    'Seventeen', 'Eighteen', 'Nineteen'
-  ];
-  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-  function convertBelowThousand(num: number): string {
-    let str = '';
-    if (num >= 100) {
-      str += units[Math.floor(num / 100)] + ' Hundred ';
-      num %= 100;
-    }
-    if (num >= 20) {
-      str += tens[Math.floor(num / 10)] + ' ';
-      num %= 10;
-    }
-    if (num > 0) {
-      str += units[num] + ' ';
-    }
-    return str.trim();
-  }
-
-  let words = '';
-  const crore = Math.floor(n / 10000000);
-  let rem = n % 10000000;
-  const lakh = Math.floor(rem / 100000);
-  rem %= 100000;
-  const thousand = Math.floor(rem / 1000);
-  rem %= 1000;
-
-  if (crore > 0) words += convertBelowThousand(crore) + ' Crore ';
-  if (lakh > 0) words += convertBelowThousand(lakh) + ' Lakh ';
-  if (thousand > 0) words += convertBelowThousand(thousand) + ' Thousand ';
-  if (rem > 0) words += convertBelowThousand(rem);
-
-  return `${words.trim()} Rupees Only`;
 }
 
 export function InvoicePrintModal({
@@ -100,7 +58,7 @@ export function InvoicePrintModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 select-none overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 overflow-y-auto">
       <div className="bg-white text-slate-900 border-2 border-[#004b6e] shadow-2xl max-w-4xl w-full my-auto overflow-hidden font-sans print:p-0 print:border-none print:shadow-none print:m-0 print:w-full">
         {/* Action Toolbar (Hidden in Print) */}
         <div className="bg-[#004b6e] text-white px-3 py-1.5 flex items-center justify-between border-b border-[#003859] print:hidden">

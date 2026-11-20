@@ -111,7 +111,7 @@ export function VoucherEntryScreen({
         }
       }
     } else {
-      const nextNum = generateNextVoucherNumber(voucherType, allVouchers);
+      const nextNum = generateNextVoucherNumber(allVouchers, voucherType);
       setVoucherNumber(nextNum);
       setDate(todayISO());
       setReferenceNo('');
@@ -379,11 +379,33 @@ export function VoucherEntryScreen({
     const partyGroupId = voucherType === 'Sales' ? 'sundry-debtors' : 'sundry-creditors';
     const mainAccGroupId = voucherType === 'Sales' ? 'sales-accounts' : 'purchase-accounts';
 
-    const partyLedger = ledgers.find((l) => l.groupId === partyGroupId) || ledgers[0];
-    const mainLedger = ledgers.find((l) => l.groupId === mainAccGroupId) || ledgers[1];
-    const cgstLedger = ledgers.find((l) => l.name.toLowerCase().includes('cgst'));
-    const sgstLedger = ledgers.find((l) => l.name.toLowerCase().includes('sgst'));
-    const igstLedger = ledgers.find((l) => l.name.toLowerCase().includes('igst'));
+    // Preserve currently selected party ledger if present
+    const existingPartyLine = voucherType === 'Sales'
+      ? lines.find((l) => l.type === 'Dr')
+      : lines.find((l) => l.type === 'Cr');
+    const existingPartyLedger = existingPartyLine ? ledgers.find((l) => l.id === existingPartyLine.ledgerId) : null;
+    const partyLedger = existingPartyLedger || ledgers.find((l) => l.groupId === partyGroupId) || ledgers[0];
+
+    // Preserve currently selected main account (Sales/Purchase) ledger if present
+    const existingMainLine = voucherType === 'Sales'
+      ? lines.find((l) => l.type === 'Cr' && !l.ledgerName.toLowerCase().includes('gst'))
+      : lines.find((l) => l.type === 'Dr' && !l.ledgerName.toLowerCase().includes('gst'));
+    const existingMainLedger = existingMainLine ? ledgers.find((l) => l.id === existingMainLine.ledgerId) : null;
+    const mainLedger = existingMainLedger || ledgers.find((l) => l.groupId === mainAccGroupId) || ledgers[1];
+
+    // Choose Input CGST/SGST/IGST (ITC) for Purchase / Debit Note, and Output for Sales / Credit Note
+    const isPurchase = voucherType === 'Purchase' || voucherType === 'Debit Note';
+    const cgstLedger = isPurchase
+      ? ledgers.find((l) => l.name.toLowerCase().includes('cgst') && (l.name.toLowerCase().includes('input') || l.name.toLowerCase().includes('itc'))) || ledgers.find((l) => l.name.toLowerCase().includes('cgst'))
+      : ledgers.find((l) => l.name.toLowerCase().includes('cgst') && l.name.toLowerCase().includes('output')) || ledgers.find((l) => l.name.toLowerCase().includes('cgst'));
+
+    const sgstLedger = isPurchase
+      ? ledgers.find((l) => l.name.toLowerCase().includes('sgst') && (l.name.toLowerCase().includes('input') || l.name.toLowerCase().includes('itc'))) || ledgers.find((l) => l.name.toLowerCase().includes('sgst'))
+      : ledgers.find((l) => l.name.toLowerCase().includes('sgst') && l.name.toLowerCase().includes('output')) || ledgers.find((l) => l.name.toLowerCase().includes('sgst'));
+
+    const igstLedger = isPurchase
+      ? ledgers.find((l) => l.name.toLowerCase().includes('igst') && (l.name.toLowerCase().includes('input') || l.name.toLowerCase().includes('itc'))) || ledgers.find((l) => l.name.toLowerCase().includes('igst'))
+      : ledgers.find((l) => l.name.toLowerCase().includes('igst') && l.name.toLowerCase().includes('output')) || ledgers.find((l) => l.name.toLowerCase().includes('igst'));
 
     const newLines: VoucherEntryLine[] = [];
 
@@ -496,23 +518,64 @@ export function VoucherEntryScreen({
     }
   }
 
-  // Keyboard shortcut listener for Ctrl+A or Enter to trigger Accept
+  const handleCancel = useCallback(() => {
+    const hasUnsavedWork =
+      itemLines.length > 0 ||
+      lines.some((l) => l.amount > 0) ||
+      (singleAmount && parseFloat(singleAmount) > 0);
+    if (hasUnsavedWork) {
+      const confirmDiscard = window.confirm('Discard unsaved changes and quit voucher creation?');
+      if (!confirmDiscard) return;
+    }
+    onCancel();
+  }, [itemLines, lines, singleAmount, onCancel]);
+
+  // Handle tally-accept custom event dispatched from App.tsx (Ctrl+A / Cmd+A)
+  useEffect(() => {
+    const handleTallyAccept = () => {
+      if (!doubleEntryStats.isValid) {
+        setValidationErrors(doubleEntryStats.errors);
+        return;
+      }
+      setShowAcceptPrompt(true);
+    };
+    window.addEventListener('tally-accept', handleTallyAccept);
+    return () => window.removeEventListener('tally-accept', handleTallyAccept);
+  }, [doubleEntryStats]);
+
+  // Keyboard shortcut listener for Ctrl+A, Y/N, and Esc
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        setShowAcceptPrompt(true);
-      } else if (e.key === 'Escape') {
-        if (showAcceptPrompt) {
+      if (showAcceptPrompt) {
+        if (e.key === 'y' || e.key === 'Y' || e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          void handleSave();
+        } else if (e.key === 'n' || e.key === 'N' || e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
           setShowAcceptPrompt(false);
-        } else {
-          onCancel();
         }
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!doubleEntryStats.isValid) {
+          setValidationErrors(doubleEntryStats.errors);
+        } else {
+          setShowAcceptPrompt(true);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCancel();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showAcceptPrompt, onCancel]);
+  }, [showAcceptPrompt, doubleEntryStats, handleCancel]);
 
   const VOUCHER_BUTTONS: { type: TallyVoucherType; key: string }[] = [
     { type: 'Contra', key: 'F4' },
@@ -532,7 +595,7 @@ export function VoucherEntryScreen({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onCancel}
+            onClick={handleCancel}
             className="bg-[#00253d] border border-[#557e96] hover:bg-[#fed843] hover:text-black px-2 py-0.5 text-xs font-bold transition flex items-center gap-1"
           >
             <ArrowLeft size={12} />
@@ -1004,7 +1067,7 @@ export function VoucherEntryScreen({
           <div className="flex items-center justify-between pt-1">
             <button
               type="button"
-              onClick={onCancel}
+              onClick={handleCancel}
               disabled={saving}
               className="bg-[#edf4f8] border border-[#7ea1b5] hover:bg-[#a61a1a] hover:text-white px-3 py-1 text-xs font-bold text-[#004b6e] transition"
             >

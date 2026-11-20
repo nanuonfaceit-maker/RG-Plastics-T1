@@ -70,12 +70,45 @@ export function getDB(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+// In-memory fallback for test and SSR environments where indexedDB is not available
+const inMemoryStores = new Map<string, Map<string, any>>();
+
+function getMemoryStore(name: string): Map<string, any> {
+  if (!inMemoryStores.has(name)) {
+    inMemoryStores.set(name, new Map());
+  }
+  return inMemoryStores.get(name)!;
+}
+
 // Generic transaction helper
 async function tx<T>(
   storeName: string,
   mode: IDBTransactionMode,
   callback: (store: IDBObjectStore) => IDBRequest<T> | void
 ): Promise<T> {
+  if (typeof indexedDB === 'undefined') {
+    const memStore = getMemoryStore(storeName);
+    const mockStore: any = {
+      getAll: () => ({ result: Array.from(memStore.values()), onsuccess: null, onerror: null }),
+      get: (key: string) => ({ result: memStore.get(key), onsuccess: null, onerror: null }),
+      put: (val: any) => {
+        const key = val.id || val.key || (val.companyId ? `${val.companyId}_${val.id}` : String(Date.now()));
+        memStore.set(key, val);
+        return { result: key, onsuccess: null, onerror: null };
+      },
+      delete: (key: string) => {
+        memStore.delete(key);
+        return { result: undefined, onsuccess: null, onerror: null };
+      },
+      clear: () => {
+        memStore.clear();
+        return { result: undefined, onsuccess: null, onerror: null };
+      },
+    };
+    const req: any = callback(mockStore);
+    return req ? req.result : (undefined as unknown as T);
+  }
+
   const db = await getDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, mode);
@@ -255,26 +288,103 @@ export async function exportBackup(): Promise<string> {
 
 export async function importBackup(jsonString: string): Promise<{ success: boolean; message: string }> {
   try {
-    const data: BackupData = JSON.parse(jsonString);
-    if (!data.companies || !Array.isArray(data.companies)) {
-      throw new Error('Invalid backup file: Missing company records.');
+    const raw = JSON.parse(jsonString);
+
+    // Case 1: Standard Tally Prime Backup
+    if (raw.companies && Array.isArray(raw.companies)) {
+      const data = raw as BackupData;
+      for (const c of data.companies || []) await saveCompany(c);
+      for (const g of data.groups || []) await saveGroup(g);
+      for (const l of data.ledgers || []) await saveLedger(l);
+      for (const v of data.vouchers || []) await saveVoucher(v);
+      for (const s of data.stockItems || []) await saveStockItem(s);
+      for (const gd of data.godowns || []) await saveGodown(gd);
+
+      if (data.companies.length > 0) {
+        await setActiveCompanyId(data.companies[0].id);
+      }
+
+      return {
+        success: true,
+        message: `Restored ${data.companies.length} company, ${data.ledgers?.length || 0} ledgers, and ${data.vouchers?.length || 0} vouchers successfully.`,
+      };
     }
 
-    for (const c of data.companies || []) await saveCompany(c);
-    for (const g of data.groups || []) await saveGroup(g);
-    for (const l of data.ledgers || []) await saveLedger(l);
-    for (const v of data.vouchers || []) await saveVoucher(v);
-    for (const s of data.stockItems || []) await saveStockItem(s);
-    for (const gd of data.godowns || []) await saveGodown(gd);
+    // Case 2: Supabase Cloud Vault Snapshot (Parties & Transactions)
+    if (raw.transactions || raw.parties || (raw.system && String(raw.system).includes('Vault'))) {
+      const activeCompanyId = (await getActiveCompanyId()) || 'comp-rg-plastics';
+      let importedParties = 0;
+      let importedVouchers = 0;
 
-    if (data.companies.length > 0) {
-      await setActiveCompanyId(data.companies[0].id);
+      if (Array.isArray(raw.parties)) {
+        for (const p of raw.parties) {
+          const groupId = p.partyType === 'creditor' ? 'sundry-creditors' : 'sundry-debtors';
+          await saveLedger({
+            id: p.id || `led-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            companyId: activeCompanyId,
+            name: p.name || 'Unnamed Party',
+            groupId,
+            openingBalance: Number(p.openingBalance || p.opening_balance || 0),
+            openingType: groupId === 'sundry-debtors' ? 'Dr' : 'Cr',
+            gstin: p.gstin,
+            phone: p.phone,
+            address: p.address,
+            state: p.state || 'Maharashtra',
+            isSystem: false,
+            createdAt: p.createdAt || p.created_at || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+          importedParties++;
+        }
+      }
+
+      if (Array.isArray(raw.transactions)) {
+        for (const t of raw.transactions) {
+          if (t.isDeleted) continue;
+          const isSale = t.type === 'Sale';
+          const isPurchase = t.type === 'Purchase';
+          const isReceipt = t.type === 'Receipt';
+          const isPayment = t.type === 'Payment';
+          const vType = isSale ? 'Sales' : isPurchase ? 'Purchase' : isReceipt ? 'Receipt' : isPayment ? 'Payment' : 'Contra';
+          const amt = Number(t.amount || 0);
+
+          await saveVoucher({
+            id: t.id || `vch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            companyId: activeCompanyId,
+            voucherType: vType,
+            voucherNumber: t.transactionNo || t.id || `VCH-${Date.now()}`,
+            date: t.date || new Date().toISOString().slice(0, 10),
+            lines: [
+              {
+                id: '1',
+                ledgerId: t.partyId || 'led-cash',
+                ledgerName: t.partyName || 'Cash',
+                type: isSale || isPayment ? 'Dr' : 'Cr',
+                amount: amt,
+              },
+              {
+                id: '2',
+                ledgerId: isSale ? 'led-sales' : isPurchase ? 'led-purchase' : 'led-cash',
+                ledgerName: isSale ? 'Sales Account' : isPurchase ? 'Purchase Account' : 'Cash-in-Hand',
+                type: isSale || isPayment ? 'Cr' : 'Dr',
+                amount: amt,
+              },
+            ],
+            narration: t.notes || t.particulars || '',
+            createdAt: t.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+          importedVouchers++;
+        }
+      }
+
+      return {
+        success: true,
+        message: `Restored Cloud Vault snapshot: ${importedParties} parties converted to ledgers and ${importedVouchers} transactions converted to vouchers.`,
+      };
     }
 
-    return {
-      success: true,
-      message: `Restored ${data.companies.length} company, ${data.ledgers.length} ledgers, and ${data.vouchers.length} vouchers successfully.`,
-    };
+    throw new Error('Unrecognized backup schema. Please upload a valid Tally Prime JSON backup or Cloud Audit Vault snapshot.');
   } catch (err) {
     return {
       success: false,

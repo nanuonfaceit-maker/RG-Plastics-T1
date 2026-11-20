@@ -36,6 +36,7 @@ export function GstReportView({
 }: Props) {
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'sales' | 'purchases'>('sales');
   const [printVoucher, setPrintVoucher] = useState<Voucher | null>(null);
 
   const report = useMemo(() => {
@@ -63,7 +64,17 @@ export function GstReportView({
 
   const printPartyLedger = useMemo(() => {
     if (!printVoucher) return null;
-    const partyLine = printVoucher.lines.find((l) => l.type === 'Dr');
+    const partyFromGroup = ledgers.find(
+      (l) =>
+        (l.groupId === 'sundry-debtors' || l.groupId === 'sundry-creditors') &&
+        printVoucher.lines.some((vl) => vl.ledgerId === l.id)
+    );
+    if (partyFromGroup) return partyFromGroup;
+
+    const isCrParty = printVoucher.voucherType === 'Purchase' || printVoucher.voucherType === 'Credit Note';
+    const partyLine = isCrParty
+      ? printVoucher.lines.find((l) => l.type === 'Cr')
+      : printVoucher.lines.find((l) => l.type === 'Dr');
     return ledgers.find((l) => l.id === partyLine?.ledgerId) || null;
   }, [printVoucher, ledgers]);
 
@@ -235,84 +246,194 @@ export function GstReportView({
           </div>
         </div>
 
+        {/* Tab Switcher for Outward vs Inward Registers */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('sales')}
+            className={`px-3 py-1 font-bold text-xs border transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'sales'
+                ? 'bg-[#004b6e] text-[#fed843] border-[#003859] shadow-xs'
+                : 'bg-white text-[#004b6e] border-[#8caebd] hover:bg-[#edf4f8]'
+            }`}
+          >
+            <Receipt size={13} />
+            <span>Outward Supplies / Sales (GSTR-1) ({salesVouchers.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('purchases')}
+            className={`px-3 py-1 font-bold text-xs border transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'purchases'
+                ? 'bg-[#004b6e] text-[#fed843] border-[#003859] shadow-xs'
+                : 'bg-white text-[#004b6e] border-[#8caebd] hover:bg-[#edf4f8]'
+            }`}
+          >
+            <Receipt size={13} />
+            <span>Inward Supplies / Purchases (GSTR-2B) ({purchaseVouchers.length})</span>
+          </button>
+        </div>
+
         {/* Sales Vouchers (Tax Invoices) Table */}
-        <div className="bg-white border-2 border-[#004b6e] shadow-md overflow-hidden">
-          <div className="bg-[#004b6e] px-3 py-1.5 border-b border-[#003859] flex items-center justify-between text-white">
-            <h2 className="text-xs font-black uppercase tracking-wider text-[#fed843] flex items-center gap-1.5">
-              <Receipt size={14} />
-              Outward Supplies (Tax Invoices - GSTR-1 Register)
-            </h2>
-            <span className="text-[10px] text-[#c2d7e4] font-mono">
-              {salesVouchers.length} Invoices recorded
-            </span>
-          </div>
+        {activeTab === 'sales' && (
+          <div className="bg-white border-2 border-[#004b6e] shadow-md overflow-hidden">
+            <div className="bg-[#004b6e] px-3 py-1.5 border-b border-[#003859] flex items-center justify-between text-white">
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#fed843] flex items-center gap-1.5">
+                <Receipt size={14} />
+                Outward Supplies (Tax Invoices - GSTR-1 Register)
+              </h2>
+              <span className="text-[10px] text-[#c2d7e4] font-mono">
+                {salesVouchers.length} Invoices recorded
+              </span>
+            </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#004b6e] text-white border-b border-[#003859] text-[10px] font-bold uppercase tracking-wider">
-                  <th className="py-1.5 px-2.5 border-r border-[#003859]">Date</th>
-                  <th className="py-1.5 px-2.5 border-r border-[#003859]">Invoice No</th>
-                  <th className="py-1.5 px-2.5 border-r border-[#003859]">Buyer / Recipient</th>
-                  <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">Taxable Value</th>
-                  <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">CGST</th>
-                  <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">SGST</th>
-                  <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">IGST</th>
-                  <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">Invoice Total</th>
-                  <th className="py-1.5 px-2 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#c2d7e4]">
-                {salesVouchers.map((v) => {
-                  const partyLine = v.lines.find((l) => l.type === 'Dr');
-                  const itemLines = v.itemLines || [];
-                  const taxable = itemLines.reduce((s, i) => s + Number(i.amount || 0), 0);
-                  const cgst = itemLines.reduce((s, i) => s + Number(i.cgst || 0), 0);
-                  const sgst = itemLines.reduce((s, i) => s + Number(i.sgst || 0), 0);
-                  const igst = itemLines.reduce((s, i) => s + Number(i.igst || 0), 0);
-                  const total = partyLine?.amount || taxable + cgst + sgst + igst;
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#004b6e] text-white border-b border-[#003859] text-[10px] font-bold uppercase tracking-wider">
+                    <th className="py-1.5 px-2.5 border-r border-[#003859]">Date</th>
+                    <th className="py-1.5 px-2.5 border-r border-[#003859]">Invoice No</th>
+                    <th className="py-1.5 px-2.5 border-r border-[#003859]">Buyer / Recipient</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">Taxable Value</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">CGST</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">SGST</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">IGST</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">Invoice Total</th>
+                    <th className="py-1.5 px-2 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#c2d7e4]">
+                  {salesVouchers.map((v) => {
+                    const partyLine = v.lines.find((l) => l.type === 'Dr');
+                    const itemLines = v.itemLines || [];
+                    const taxable = itemLines.reduce((s, i) => s + Number(i.amount || 0), 0);
+                    const cgst = itemLines.reduce((s, i) => s + Number(i.cgst || 0), 0);
+                    const sgst = itemLines.reduce((s, i) => s + Number(i.sgst || 0), 0);
+                    const igst = itemLines.reduce((s, i) => s + Number(i.igst || 0), 0);
+                    const total = partyLine?.amount || taxable + cgst + sgst + igst;
 
-                  return (
-                    <tr key={v.id} className="hover:bg-[#fed843] hover:text-black transition-colors group">
-                      <td className="py-1 px-2.5 font-mono border-r border-[#c2d7e4]">{formatDate(v.date)}</td>
-                      <td className="py-1 px-2.5 font-mono font-bold text-[#004b6e] group-hover:text-black border-r border-[#c2d7e4]">{v.voucherNumber}</td>
-                      <td className="py-1 px-2.5 font-semibold text-[#0d222f] group-hover:text-black border-r border-[#c2d7e4]">
-                        {partyLine?.ledgerName || 'Cash Sale'}
-                      </td>
-                      <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(taxable || total)}</td>
-                      <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(cgst)}</td>
-                      <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(sgst)}</td>
-                      <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(igst)}</td>
-                      <td className="py-1 px-2.5 text-right font-mono font-bold text-[#004b6e] group-hover:text-black border-r border-[#c2d7e4]">{formatINR(total)}</td>
-                      <td className="py-1 px-2 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setPrintVoucher(v)}
-                          className="px-2 py-0.5 bg-[#edf4f8] hover:bg-[#004b6e] hover:text-white text-[#004b6e] border border-[#7ea1b5] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
-                        >
-                          <Printer size={11} />
-                          <span>Tax Invoice</span>
-                        </button>
+                    return (
+                      <tr key={v.id} className="hover:bg-[#fed843] hover:text-black transition-colors group">
+                        <td className="py-1 px-2.5 font-mono border-r border-[#c2d7e4]">{formatDate(v.date)}</td>
+                        <td className="py-1 px-2.5 font-mono font-bold text-[#004b6e] group-hover:text-black border-r border-[#c2d7e4]">{v.voucherNumber}</td>
+                        <td className="py-1 px-2.5 font-semibold text-[#0d222f] group-hover:text-black border-r border-[#c2d7e4]">
+                          {partyLine?.ledgerName || 'Cash Sale'}
+                        </td>
+                        <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(taxable || total)}</td>
+                        <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(cgst)}</td>
+                        <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(sgst)}</td>
+                        <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(igst)}</td>
+                        <td className="py-1 px-2.5 text-right font-mono font-bold text-[#004b6e] group-hover:text-black border-r border-[#c2d7e4]">{formatINR(total)}</td>
+                        <td className="py-1 px-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setPrintVoucher(v)}
+                            className="px-2 py-0.5 bg-[#edf4f8] hover:bg-[#004b6e] hover:text-white text-[#004b6e] border border-[#7ea1b5] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Printer size={11} />
+                            <span>Tax Invoice</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {salesVouchers.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-[#4a6777] font-sans">
+                        No sales tax invoices recorded in this period.
                       </td>
                     </tr>
-                  );
-                })}
-
-                {salesVouchers.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="py-8 text-center text-[#4a6777] font-sans">
-                      No sales tax invoices recorded in this period.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Purchase Vouchers (Inward Tax Invoices) Table */}
+        {activeTab === 'purchases' && (
+          <div className="bg-white border-2 border-[#004b6e] shadow-md overflow-hidden">
+            <div className="bg-[#004b6e] px-3 py-1.5 border-b border-[#003859] flex items-center justify-between text-white">
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#fed843] flex items-center gap-1.5">
+                <Receipt size={14} />
+                Inward Supplies (Eligible ITC - GSTR-2B Register)
+              </h2>
+              <span className="text-[10px] text-[#c2d7e4] font-mono">
+                {purchaseVouchers.length} Inward Invoices recorded
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#004b6e] text-white border-b border-[#003859] text-[10px] font-bold uppercase tracking-wider">
+                    <th className="py-1.5 px-2.5 border-r border-[#003859]">Date</th>
+                    <th className="py-1.5 px-2.5 border-r border-[#003859]">Voucher / Ref No</th>
+                    <th className="py-1.5 px-2.5 border-r border-[#003859]">Supplier / Vendor</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">Taxable Value</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">Input CGST</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">Input SGST</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">Input IGST</th>
+                    <th className="py-1.5 px-2.5 text-right border-r border-[#003859]">Total Value</th>
+                    <th className="py-1.5 px-2 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#c2d7e4]">
+                  {purchaseVouchers.map((v) => {
+                    const partyLine = v.lines.find((l) => l.type === 'Cr');
+                    const itemLines = v.itemLines || [];
+                    const taxable = itemLines.reduce((s, i) => s + Number(i.amount || 0), 0);
+                    const cgst = itemLines.reduce((s, i) => s + Number(i.cgst || 0), 0);
+                    const sgst = itemLines.reduce((s, i) => s + Number(i.sgst || 0), 0);
+                    const igst = itemLines.reduce((s, i) => s + Number(i.igst || 0), 0);
+                    const total = partyLine?.amount || taxable + cgst + sgst + igst;
+
+                    return (
+                      <tr key={v.id} className="hover:bg-[#fed843] hover:text-black transition-colors group">
+                        <td className="py-1 px-2.5 font-mono border-r border-[#c2d7e4]">{formatDate(v.date)}</td>
+                        <td className="py-1 px-2.5 font-mono font-bold text-[#004b6e] group-hover:text-black border-r border-[#c2d7e4]">
+                          {v.voucherNumber} {v.referenceNo ? `(${v.referenceNo})` : ''}
+                        </td>
+                        <td className="py-1 px-2.5 font-semibold text-[#0d222f] group-hover:text-black border-r border-[#c2d7e4]">
+                          {partyLine?.ledgerName || 'Cash Purchase'}
+                        </td>
+                        <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(taxable || total)}</td>
+                        <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(cgst)}</td>
+                        <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(sgst)}</td>
+                        <td className="py-1 px-2.5 text-right font-mono border-r border-[#c2d7e4]">{formatINR(igst)}</td>
+                        <td className="py-1 px-2.5 text-right font-mono font-bold text-[#004b6e] group-hover:text-black border-r border-[#c2d7e4]">{formatINR(total)}</td>
+                        <td className="py-1 px-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setPrintVoucher(v)}
+                            className="px-2 py-0.5 bg-[#edf4f8] hover:bg-[#004b6e] hover:text-white text-[#004b6e] border border-[#7ea1b5] text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Printer size={11} />
+                            <span>View / Print</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {purchaseVouchers.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-[#4a6777] font-sans">
+                        No purchase invoices recorded in this period.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Invoice Print Modal */}
         {printVoucher && (
           <InvoicePrintModal
+            open={Boolean(printVoucher)}
             voucher={printVoucher}
             company={company}
             partyLedger={printPartyLedger}

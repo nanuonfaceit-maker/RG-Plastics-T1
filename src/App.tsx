@@ -216,6 +216,13 @@ export default function App() {
   // Delete Ledger
   async function handleDeleteLedger(id: string) {
     if (!activeCompany) return;
+    const isReferenced = vouchers.some((v) => v.lines.some((l) => l.ledgerId === id));
+    if (isReferenced) {
+      alert(
+        'Cannot delete ledger: Transactions/vouchers exist referencing this ledger account. Please delete or modify the referencing vouchers first.'
+      );
+      return;
+    }
     await deleteLedger(id);
     const updated = await getLedgers(activeCompany.id);
     setLedgers(updated);
@@ -228,9 +235,22 @@ export default function App() {
   // Save Company
   async function handleSaveCompany(c: Company) {
     await saveCompany(c);
+    await setActiveCompanyId(c.id);
     const updatedList = await getCompanies();
     setAllCompanies(updatedList);
     setActiveCompany(c);
+    const [gList, lList, vList, sList, gdList] = await Promise.all([
+      getGroups(c.id),
+      getLedgers(c.id),
+      getVouchers(c.id),
+      getStockItems(c.id),
+      getGodowns(c.id),
+    ]);
+    setGroups(gList);
+    setLedgers(lList);
+    setVouchers(vList);
+    setStockItems(sList);
+    setGodowns(gdList);
     setIsCompanyModalOpen(false);
     showToast(`Company profile updated`);
   }
@@ -348,6 +368,10 @@ export default function App() {
         }
         if (selectedLedgerId) {
           setSelectedLedgerId(null);
+          return;
+        }
+        if (view === 'vouchers') {
+          // Allow VoucherEntryScreen to handle its own Escape confirmation
           return;
         }
         if (view !== 'dashboard') {
@@ -884,9 +908,9 @@ export default function App() {
 
               {/* Import Backup */}
               <div className="p-2.5 bg-[#f0f5f8] border border-[#8caebd] space-y-1.5">
-                <p className="font-bold text-[#004b6e]">Restore from JSON Backup</p>
+                <p className="font-bold text-[#004b6e]">Restore from JSON Backup (Unified)</p>
                 <p className="text-[10px] text-[#4a6777]">
-                  Restore previously exported companies and accounting vouchers.
+                  Restore offline Tally Prime JSON backups or Supabase Cloud Audit Vault snapshots seamlessly.
                 </p>
                 <label className="w-full flex items-center justify-center gap-1.5 py-1 bg-[#edf4f8] hover:bg-[#fed843] hover:text-black text-[#004b6e] border border-[#7ea1b5] font-bold cursor-pointer transition">
                   <Upload size={13} />
